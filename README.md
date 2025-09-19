@@ -6,9 +6,9 @@ Production-ready multi agent drone AI with PPO, FastAPI backend, Docker deployme
 ---
 
 ## Overview  
-This project combines Reinforcement Learning (RL), Multi-Agent Path Finding (MAPF), and real-time alignment scoring to control drones safely. Instead of waiting for delayed success signals, the system scores each action instantly against internal principles (the “Constitution”) so it can act safely and efficiently in real time.
+This system combines Reinforcement Learning (RL), Multi-Agent Path Finding (MAPF), and real-time alignment scoring to control drones safely. Instead of waiting for delayed success signals, the system scores each action instantly against internal principles (the “Constitution”) so it can act safely and efficiently in real time.
 
-The system integrates:  
+The architecture integrates:  
 - A custom drone environment  
 - A PPO agent in PyTorch  
 - Alignment scoring for safety and smoothness  
