@@ -3,7 +3,7 @@
 # Core ML stack
 gymnasium>=0.29.1
 torch==2.2.2
-numpy==1.24.3
+numpy==2.0.2
 matplotlib==3.7.1
 
 # API and monitoring
