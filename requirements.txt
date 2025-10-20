@@ -8,7 +8,7 @@ matplotlib==3.7.1
 
 # API and monitoring
 fastapi==0.110.0
-uvicorn==0.27.1
+uvicorn==0.38.0
 prometheus-client==0.20.0
 
 # Testing and dev tools
