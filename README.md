@@ -152,6 +152,34 @@ Moves clamp at the grid edge, so an illegal move is absorbed rather than rejecte
 
 **Reward**: `+10.0` on reaching the goal, `-1.0` per step otherwise. `terminated` on goal, `truncated` at `max_steps`. The agent starts at the origin and the goal sits at the far corner, so the shortest path under this config is 38 moves.
 
+That shipped reward is deliberately spiky: the goal bonus is an event, not a gradient. It is the top left quadrant below, and it is the cheapest thing that works for a single drone. Once more than one drone shares the grid, the quadrant matters, because a spike is exactly what a policy learns to farm.
+
+<p align="center">
+  <img src="assets/reward-shaping.svg" alt="A two by two matrix. Self alignment on one axis and peer interaction on the other, each either event based or continuous. Continuous on both axes is the stable quadrant; the other three invite goal hacking on one or both sides." width="100%">
+</p>
+
+<details>
+<summary>Same diagram as text</summary>
+
+```text
+                          PEER INTERACTION
+                  event based            continuous
+                  +Y if coop_event       g(coop_quality)
+  SELF
+  ALIGNMENT
+  event based     Spiky on both axes     Spiky on self only
+  +X if goal_met  unstable, goal         cooperation looks good,
+                  hacking likely         solo flight degrades
+
+  continuous      Spiky on peers only    Continuous on both axes
+  f(alignment)    flies itself well,     the stable quadrant,
+                  competes with peers    no spike left to chase
+```
+
+</details>
+
+This is a design reference for the multi-drone roadmap, not something `src/` implements today.
+
 ---
 
 ## The PPO agent
