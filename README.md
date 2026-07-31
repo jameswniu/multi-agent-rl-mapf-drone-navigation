@@ -49,6 +49,10 @@ So this repo attaches a validator to both sides of the loop and makes every step
 
 The distinction earns its keep because the two need different responses. Drift means a bound is wrong or a distribution is moving, so you widen, retrain, or investigate. Hallucination means the output space itself was violated, so you stop.
 
+<p align="center">
+  <img src="assets/drift-vs-hallucination.svg" alt="Drift against hallucination. Drift is a value of the right kind landing outside its declared range, shown as 200 beyond a bound of 20. Hallucination is a value that was never in the space, shown as action 999 detached from a five slot discrete space." width="100%">
+</p>
+
 **This is not a theoretical feature.** Getting CI green on this repo surfaced a bug the validators had been reporting correctly the whole time while nobody was reading them. `observation_space` declared a single scalar upper bound of `grid_size` across all five dimensions, but the fifth dimension counts down from `max_steps`. Under the shipped config that is 200 against a bound of 20, so **every step of every episode raised an observation drift error**. The validator was right. The declared space was wrong.
 
 ---
