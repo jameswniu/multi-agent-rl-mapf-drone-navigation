@@ -148,8 +148,16 @@ class DroneEnv(gym.Env):
                 raise ValueError("not enough free cells for a fixed layout")
             order = np.lexsort((free[:, 1], free[:, 0]))
             ordered = free[order]
-            self.positions = ordered[: self.num_drones].astype(np.float32)
-            self.goals = ordered[-self.num_drones :][::-1].astype(np.float32)
+            half = len(ordered) // 2
+            # Spread evenly through each half rather than taking a contiguous
+            # block. Consecutive cells in sorted order form a single column, so
+            # taking the first and last N stacked every drone and every goal on
+            # top of each other, which is both a degenerate task and unreadable
+            # when drawn.
+            start_idx = np.linspace(0, half - 1, self.num_drones).astype(int)
+            goal_idx = np.linspace(half, len(ordered) - 1, self.num_drones).astype(int)
+            self.positions = ordered[start_idx].astype(np.float32)
+            self.goals = ordered[goal_idx][::-1].astype(np.float32)
             return
         needed = 2 * self.num_drones
         if len(free) < needed:
