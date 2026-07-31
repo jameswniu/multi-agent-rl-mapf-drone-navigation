@@ -52,7 +52,7 @@
 <text x="34" y="88" fill="#f2f5f3" font-size="34" font-weight="700" letter-spacing="0.4">Architecture</text>
 <text x="34" y="118" fill="#939a95" font-size="19">One control loop, top to bottom. The bright band is the part that watches.</text>
 <rect x="700" y="30" width="2" height="62" fill="#333d36"/>
-<text x="946" y="52" fill="#979e99" font-size="17" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">5 obs dims / 5 actions</text>
+<text x="946" y="52" fill="#979e99" font-size="17" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">9 obs dims / 5 actions</text>
 <text x="946" y="78" fill="#979e99" font-size="17" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">grid 20x20 / 200 steps</text>
 
 <text x="62" y="170" fill="#6faa85" font-size="16" font-weight="700" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">01</text>
@@ -80,8 +80,8 @@
 <rect x="526" y="372" width="420" height="152" fill="url(#panel)" stroke="#47514a" stroke-width="1.5"/>
 <rect x="538" y="372.7" width="396" height="1.4" fill="url(#edge)"/>
 <text x="548" y="408" fill="#ecefed" font-size="22" font-weight="700">spaces</text>
-<text x="548" y="442" fill="#a5aca7" font-size="19">observation Box(5): x, y, goal x,</text>
-<text x="548" y="470" fill="#a5aca7" font-size="19">goal y, steps remaining</text>
+<text x="548" y="442" fill="#a5aca7" font-size="19">observation Box(9): x, y, goal x, goal y,</text>
+<text x="548" y="470" fill="#a5aca7" font-size="19">steps remaining, plus 4 sensor flags</text>
 <text x="548" y="504" fill="#a5aca7" font-size="19">action Discrete(5), edge clamped</text>
 
 <path d="M 482 448 L 518 448" stroke="#949a96" stroke-width="2" fill="none" marker-end="url(#a)"/>
