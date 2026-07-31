@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Multi-agent RL drone navigation, replayed</title>
-<meta name="description" content="Browser replay of recorded PPO drone rollouts on a grid world, at four points during training.">
+<meta name="description" content="Browser replay of recorded PPO drone rollouts, with learning curves across seeds and an untrained ghost for direct comparison.">
 <style>
   :root {
     --bg: #070b08;
@@ -14,9 +14,10 @@
     --border: #47514a;
     --text: #f2f5f3;
     --muted: #a5aca7;
-    --dim: #757c77;
+    --dim: #8b938e;
     --green: #6faa85;
     --chrome: #e8ebe9;
+    --warn: #c9a227;
   }
 
   * { box-sizing: border-box; }
@@ -38,178 +39,110 @@
   #stage { position: fixed; inset: 0; }
   canvas { display: block; }
 
+  .panel { background: var(--bg-panel); border: 1px solid var(--border); }
+
   /* masthead */
   header {
     position: fixed;
     top: 0; left: 0; right: 0;
-    padding: 18px 22px 20px;
-    background: linear-gradient(to bottom, rgba(7,11,8,0.92), rgba(7,11,8,0));
+    padding: 18px 22px 22px;
+    background: linear-gradient(to bottom, rgba(7,11,8,0.94), rgba(7,11,8,0));
     pointer-events: none;
+    z-index: 2;
   }
   .eyebrow {
-    font-size: 12.5px;
-    font-weight: 700;
-    letter-spacing: 3.2px;
-    color: var(--green);
-    margin: 0 0 8px;
+    font-size: 12.5px; font-weight: 700; letter-spacing: 3.2px;
+    color: var(--green); margin: 0 0 8px;
   }
   h1 { font-size: 20px; font-weight: 700; margin: 0; letter-spacing: 0.2px; }
-  .sub { font-size: 13.5px; color: var(--muted); margin: 5px 0 0; max-width: 62ch; line-height: 1.45; }
+  .sub { font-size: 13.5px; color: var(--muted); margin: 6px 0 0; max-width: 58ch; line-height: 1.5; }
 
-  /* run selector */
-  #runs {
-    position: fixed;
-    top: 22px; right: 22px;
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-    background: var(--border);
-    border: 1px solid var(--border);
-    width: 226px;
+  /* right rail */
+  #rail {
+    position: fixed; top: 22px; right: 22px;
+    width: 268px; display: flex; flex-direction: column; gap: 12px;
+    z-index: 3;
   }
-  .run {
-    appearance: none;
-    border: 0;
-    background: var(--bg-panel);
-    color: var(--muted);
-    font: inherit;
-    font-size: 13px;
-    text-align: left;
-    padding: 9px 12px;
-    cursor: pointer;
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    gap: 10px;
+  .rail-label {
+    font-size: 12.5px; letter-spacing: 2px; text-transform: uppercase;
+    color: var(--dim); margin: 0 0 6px;
+  }
+
+  .stack { display: flex; flex-direction: column; gap: 1px; background: var(--border); border: 1px solid var(--border); }
+  .opt {
+    appearance: none; border: 0; background: var(--bg-panel); color: var(--muted);
+    font: inherit; font-size: 13px; text-align: left; padding: 9px 12px; cursor: pointer;
+    display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
     transition: background 120ms, color 120ms;
   }
-  .run:hover { background: var(--bg-chip); color: var(--text); }
-  .run[aria-pressed="true"] { background: #1a241c; color: var(--chrome); box-shadow: inset 2px 0 0 var(--green); }
-  .run:focus-visible { outline: 2px solid var(--green); outline-offset: -2px; }
-  .run .score {
+  .opt:hover { background: var(--bg-chip); color: var(--text); }
+  .opt[aria-pressed="true"] { background: #1a241c; color: var(--chrome); box-shadow: inset 2px 0 0 var(--green); }
+  .opt:focus-visible { outline: 2px solid var(--green); outline-offset: -2px; }
+  .opt .meta {
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-variant-numeric: tabular-nums;
-    font-size: 12px;
-    color: var(--dim);
+    font-variant-numeric: tabular-nums; font-size: 12px; color: var(--dim);
   }
-  .run[aria-pressed="true"] .score { color: var(--green); }
+  .opt[aria-pressed="true"] .meta { color: var(--green); }
 
-  /* readouts */
-  #hud {
-    position: fixed;
-    left: 22px; bottom: 108px;
-    display: flex;
-    gap: 1px;
-    background: var(--border);
-    border: 1px solid var(--border);
+  /* ghost toggle */
+  #ghostRow {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px; font-size: 13px; color: var(--muted); cursor: pointer;
   }
-  .stat { background: var(--bg-panel); padding: 8px 14px; min-width: 84px; }
+  #ghostRow input { accent-color: var(--green); width: 15px; height: 15px; cursor: pointer; }
+  #ghostRow:hover { color: var(--text); }
+
+  /* curve */
+  #curveBox { position: fixed; left: 22px; bottom: 96px; width: 430px; padding: 12px 14px 8px; z-index: 3; }
+  #curveHead { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; gap: 10px; }
+  #curveHead .t { font-size: 12.5px; letter-spacing: 1.6px; text-transform: uppercase; color: var(--dim); }
+  #curveHead .r { font-size: 12px; color: var(--muted); }
+  #curve { display: block; width: 100%; height: 116px; }
+  #curveFoot { font-size: 12.5px; color: var(--dim); margin-top: 4px; line-height: 1.45; }
+
+  /* hud */
+  #hud { position: fixed; left: 22px; bottom: 22px; display: flex; gap: 1px; background: var(--border); border: 1px solid var(--border); z-index: 3; }
+  .stat { background: var(--bg-panel); padding: 8px 14px; min-width: 86px; }
   .stat .k { font-size: 12px; letter-spacing: 1.6px; color: var(--dim); text-transform: uppercase; }
   .stat .v {
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-variant-numeric: tabular-nums;
-    font-size: 19px;
-    color: var(--chrome);
-    margin-top: 3px;
+    font-variant-numeric: tabular-nums; font-size: 19px; color: var(--chrome); margin-top: 3px;
   }
   .stat .v.accent { color: var(--green); }
 
   /* transport */
   #transport {
-    position: fixed;
-    left: 22px; right: 22px; bottom: 22px;
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    background: var(--bg-panel);
-    border: 1px solid var(--border);
-    padding: 12px 16px;
+    position: fixed; right: 22px; bottom: 22px; left: 500px;
+    display: flex; align-items: center; gap: 14px; padding: 12px 16px; z-index: 3;
   }
   button.ctl {
-    appearance: none;
-    background: var(--bg-chip);
-    border: 1px solid var(--border);
-    color: var(--text);
-    font: inherit;
-    font-size: 13px;
-    letter-spacing: 0.6px;
-    padding: 7px 16px;
-    cursor: pointer;
-    min-width: 74px;
+    appearance: none; background: var(--bg-chip); border: 1px solid var(--border);
+    color: var(--text); font: inherit; font-size: 13px; letter-spacing: 0.6px;
+    padding: 7px 16px; cursor: pointer; min-width: 76px;
     transition: background 120ms, border-color 120ms;
   }
   button.ctl:hover { background: #202c23; border-color: var(--green); }
   button.ctl:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
 
-  input[type="range"] {
-    appearance: none;
-    flex: 1;
-    height: 3px;
-    background: var(--line);
-    cursor: pointer;
-  }
-  input[type="range"]::-webkit-slider-thumb {
-    appearance: none;
-    width: 3px;
-    height: 20px;
-    background: var(--chrome);
-    cursor: pointer;
-  }
-  input[type="range"]::-moz-range-thumb {
-    border: 0;
-    border-radius: 0;
-    width: 3px;
-    height: 20px;
-    background: var(--chrome);
-  }
+  input[type="range"] { appearance: none; flex: 1; height: 3px; background: var(--line); cursor: pointer; }
+  input[type="range"]::-webkit-slider-thumb { appearance: none; width: 3px; height: 20px; background: var(--chrome); cursor: pointer; }
+  input[type="range"]::-moz-range-thumb { border: 0; border-radius: 0; width: 3px; height: 20px; background: var(--chrome); }
   input[type="range"]:focus-visible { outline: 2px solid var(--green); outline-offset: 4px; }
+  #step { font-size: 13px; color: var(--muted); min-width: 84px; text-align: right; }
 
-  #step { font-size: 13px; color: var(--muted); min-width: 92px; text-align: right; }
-
-  /* legend */
   #legend {
-    position: fixed;
-    right: 22px; bottom: 108px;
-    background: var(--bg-panel);
-    border: 1px solid var(--border);
-    padding: 10px 14px;
-    font-size: 12.5px;
-    color: var(--muted);
-    line-height: 1.9;
-    width: 226px;
+    position: fixed; right: 22px; bottom: 96px; width: 268px;
+    padding: 10px 14px; font-size: 12.5px; color: var(--muted); line-height: 1.85; z-index: 3;
   }
-  #legend b { color: var(--chrome); font-weight: 600; }
-  .swatch { display: inline-block; width: 9px; height: 9px; margin-right: 7px; vertical-align: baseline; }
+  .swatch { display: inline-block; width: 10px; height: 10px; margin-right: 8px; vertical-align: baseline; }
 
-  #note {
-    position: fixed;
-    left: 22px; bottom: 176px;
-    max-width: 44ch;
-    font-size: 13px;
-    line-height: 1.55;
-    color: var(--dim);
-    border-left: 2px solid var(--border);
-    padding-left: 11px;
-  }
-  #note b { color: var(--muted); font-weight: 600; }
+  #loading { position: fixed; inset: 0; display: grid; place-items: center; background: var(--bg); color: var(--muted); font-size: 13px; letter-spacing: 2px; z-index: 9; }
 
-  #loading {
-    position: fixed; inset: 0;
-    display: grid; place-items: center;
-    background: var(--bg);
-    color: var(--muted);
-    font-size: 13px;
-    letter-spacing: 2px;
+  @media (max-width: 1180px) {
+    #curveBox { display: none; }
+    #transport { left: 22px; }
   }
-
-  @media (max-width: 900px) {
-    #runs, #legend { position: static; width: auto; }
-    #note { display: none; }
-    header { position: static; background: none; }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .run, button.ctl { transition: none; }
-  }
+  @media (prefers-reduced-motion: reduce) { .opt, button.ctl { transition: none; } }
 </style>
 </head>
 <body>
@@ -217,14 +150,37 @@
 <div id="stage"></div>
 
 <header>
-  <p class="eyebrow mono">RECORDED ROLLOUTS / NOT A SIMULATION</p>
-  <h1>Four policies, one task</h1>
-  <p class="sub">Every position below came out of a real episode and was written to JSON by
-    <span class="mono">scripts/export_trajectory.py</span>. The layout is held fixed across all four runs,
-    so the only thing that changes is how much training the policy had.</p>
+  <p class="eyebrow mono">RECORDED ROLLOUTS / NOTHING SIMULATED IN THE BROWSER</p>
+  <h1 id="title">Loading</h1>
+  <p class="sub" id="blurb"></p>
 </header>
 
-<div id="runs" role="group" aria-label="Training checkpoint"></div>
+<div id="rail">
+  <div>
+    <p class="rail-label">Scenario</p>
+    <div class="stack" id="scenarios" role="group" aria-label="Scenario"></div>
+  </div>
+  <div>
+    <p class="rail-label">Checkpoint</p>
+    <div class="stack" id="runs" role="group" aria-label="Training checkpoint"></div>
+  </div>
+  <div class="panel">
+    <label id="ghostRow">
+      <input type="checkbox" id="ghost" checked>
+      <span>Show untrained ghost</span>
+    </label>
+  </div>
+</div>
+
+<div id="curveBox" class="panel">
+  <div id="curveHead">
+    <span class="t">Greedy reward</span>
+    <span class="r mono" id="curveSeeds"></span>
+  </div>
+  <svg id="curve" viewBox="0 0 400 116" preserveAspectRatio="none" role="img"
+       aria-label="Learning curve: mean greedy reward against training episodes, with the spread across seeds shaded"></svg>
+  <p id="curveFoot"></p>
+</div>
 
 <div id="hud">
   <div class="stat"><div class="k">Step</div><div class="v" id="s-step">0</div></div>
@@ -233,25 +189,21 @@
   <div class="stat"><div class="k">Refused</div><div class="v" id="s-refused">0</div></div>
 </div>
 
-<div id="legend">
-  <div><span class="swatch" style="background:#e8ebe9"></span>drone</div>
-  <div><span class="swatch" style="background:#6faa85"></span>drone at its goal</div>
-  <div><span class="swatch" style="background:#2c3730"></span>obstacle</div>
-  <div><span class="swatch" style="border:1px solid #6faa85"></span>goal marker</div>
+<div id="legend" class="panel">
+  <div><span class="swatch" style="background:#e8ebe9"></span>trained policy</div>
+  <div><span class="swatch" style="background:#6faa85"></span>arrived at its goal</div>
+  <div><span class="swatch" style="background:#6b5f52"></span>untrained ghost</div>
+  <div><span class="swatch" style="background:#232d27"></span>obstacle</div>
   <div style="margin-top:6px;color:#8b938e">drag to orbit, scroll to zoom</div>
 </div>
 
-<p id="note"><b>Refused</b> counts moves the environment rejected because two drones
-wanted the same cell or wanted to swap. That rule is enforced, never learned, so it
-holds even at zero training. <b>At goal</b> is the number the policy actually has to earn.</p>
-
-<div id="transport">
+<div id="transport" class="panel">
   <button class="ctl" id="play">Pause</button>
   <input type="range" id="scrub" min="0" max="0" value="0" step="1" aria-label="Timeline">
   <span id="step" class="mono">0 / 0</span>
 </div>
 
-<div id="loading" class="mono">LOADING TRAJECTORY</div>
+<div id="loading" class="mono">LOADING TRAJECTORIES</div>
 
 <script type="importmap">
 { "imports": {
@@ -264,21 +216,22 @@ holds even at zero training. <b>At goal</b> is the number the policy actually ha
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-const PALETTE = [0xe8ebe9, 0x9ba09d, 0xc8cfca, 0x7f8a84];
+const PALETTE = [0xe8ebe9, 0xb9c0bb, 0xd4dbd6, 0x9aa39d];
 const GOAL_GREEN = 0x6faa85;
+const GHOST = 0x6b5f52;   // warm, so it never reads as a drone doing well
+
+// Flight height scales with the board. A fixed height that looked right on the
+// 8x8 left the drones visibly detached above the much smaller 5x5.
+let FLY = 1.0;
 
 const el = id => document.getElementById(id);
 const data = await (await fetch('trajectory.json')).json();
-const N = data.gridSize;
 
 /* scene */
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x070b08);
-scene.fog = new THREE.Fog(0x070b08, N * 1.8, N * 4.2);
 
-const camera = new THREE.PerspectiveCamera(46, innerWidth / innerHeight, 0.1, 200);
-camera.position.set(N * 0.78, N * 0.98, N * 1.10);
-
+const camera = new THREE.PerspectiveCamera(46, innerWidth / innerHeight, 0.1, 240);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
@@ -287,169 +240,284 @@ el('stage').appendChild(renderer.domElement);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.06;
-controls.target.set(0, -0.7, 0);   // lifts the board clear of the transport bar
 controls.maxPolarAngle = Math.PI * 0.49;
-controls.minDistance = N * 0.45;
-controls.maxDistance = N * 3;
 
 scene.add(new THREE.AmbientLight(0xdfe6e2, 0.5));
 const key = new THREE.DirectionalLight(0xffffff, 1.5);
-key.position.set(N, N * 1.6, N * 0.6);
+key.position.set(10, 16, 6);
 scene.add(key);
 const rim = new THREE.DirectionalLight(GOAL_GREEN, 0.55);
-rim.position.set(-N, N * 0.5, -N);
+rim.position.set(-10, 5, -10);
 scene.add(rim);
 
-// Grid coordinates are 0 to N-1; the world is centred on the origin so orbiting
-// feels like turning the board rather than swinging around one corner.
-const off = (N - 1) / 2;
-const world = (x, y) => new THREE.Vector3(x - off, 0, y - off);
-
-/* board */
-const board = new THREE.Group();
+// Everything scenario-specific hangs off this group, so switching scenarios is a
+// dispose and rebuild rather than a pile of conditional edits.
+let board = new THREE.Group();
 scene.add(board);
 
-board.add(new THREE.Mesh(
-  new THREE.BoxGeometry(N + 0.4, 0.12, N + 0.4),
-  new THREE.MeshStandardMaterial({ color: 0x0d1310, roughness: 0.92, metalness: 0.1 })
-).translateY(-0.18));
+let S = null;            // active scenario
+let run = null;          // active checkpoint
+let ghostRun = null;     // its untrained counterpart
+let drones = [], trails = [], stems = [], ghosts = [];
+let world = () => new THREE.Vector3();
+let cursor = 0, playing = true;
+const SPEED = 3.2;
 
-const grid = new THREE.GridHelper(N, N, 0x2b3630, 0x1b241e);
-grid.position.y = -0.11;
-board.add(grid);
-
-const obstacleGeo = new THREE.BoxGeometry(0.88, 0.78, 0.88);
-const obstacleMat = new THREE.MeshStandardMaterial({ color: 0x232d27, roughness: 0.55, metalness: 0.5 });
-const edgeMat = new THREE.LineBasicMaterial({ color: 0x7c8a82 });
-for (const [x, y] of data.obstacles) {
-  const m = new THREE.Mesh(obstacleGeo, obstacleMat);
-  m.position.copy(world(x, y)).setY(0.28);
-  board.add(m);
-  const e = new THREE.LineSegments(new THREE.EdgesGeometry(obstacleGeo), edgeMat);
-  e.position.copy(m.position);
-  board.add(e);
+function disposeGroup(g) {
+  g.traverse(o => {
+    if (o.geometry) o.geometry.dispose();
+    if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.dispose());
+  });
+  scene.remove(g);
 }
 
-// Goals are painted flat into the floor rather than raised. An earlier version
-// used vertical columns and they read as obstacles, which is the one confusion
-// this scene cannot afford.
-const goalPadMat = new THREE.MeshBasicMaterial({
-  color: GOAL_GREEN, transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false,
-});
-const goalLineMat = new THREE.LineBasicMaterial({ color: GOAL_GREEN });
-const padGeo = new THREE.PlaneGeometry(0.78, 0.78).rotateX(-Math.PI / 2);
-data.goals.forEach(([x, y]) => {
-  const p = world(x, y);
-  const pad = new THREE.Mesh(padGeo, goalPadMat);
-  pad.position.copy(p).setY(-0.045);
-  board.add(pad);
+function buildScene(sc) {
+  disposeGroup(board);
+  [...drones, ...trails, ...stems, ...ghosts].forEach(o => {
+    if (o.geometry) o.geometry.dispose();
+    if (o.material) o.material.dispose();
+    scene.remove(o);
+  });
+  drones = []; trails = []; stems = []; ghosts = [];
 
-  const ring = new THREE.LineLoop(
-    new THREE.BufferGeometry().setFromPoints([
+  const N = sc.gridSize;
+  const off = (N - 1) / 2;
+  world = (x, y) => new THREE.Vector3(x - off, 0, y - off);
+
+  FLY = Math.max(0.78, N * 0.115);   // always clears an obstacle top at 0.67
+  scene.fog = new THREE.Fog(0x070b08, N * 1.8, N * 4.4);
+  camera.position.set(N * 0.80, N * 0.92, N * 1.12);
+  controls.target.set(0, -0.7, 0);
+  controls.minDistance = N * 0.45;
+  controls.maxDistance = N * 3;
+  controls.update();
+
+  board = new THREE.Group();
+  scene.add(board);
+
+  board.add(new THREE.Mesh(
+    new THREE.BoxGeometry(N + 0.4, 0.12, N + 0.4),
+    new THREE.MeshStandardMaterial({ color: 0x0d1310, roughness: 0.92, metalness: 0.1 })
+  ).translateY(-0.18));
+
+  const grid = new THREE.GridHelper(N, N, 0x2b3630, 0x1b241e);
+  grid.position.y = -0.11;
+  board.add(grid);
+
+  const obGeo = new THREE.BoxGeometry(0.88, 0.78, 0.88);
+  const obMat = new THREE.MeshStandardMaterial({ color: 0x232d27, roughness: 0.55, metalness: 0.5 });
+  const edgeMat = new THREE.LineBasicMaterial({ color: 0x7c8a82 });
+  for (const [x, y] of sc.obstacles) {
+    const m = new THREE.Mesh(obGeo, obMat);
+    m.position.copy(world(x, y)).setY(0.28);
+    board.add(m);
+    const e = new THREE.LineSegments(new THREE.EdgesGeometry(obGeo), edgeMat);
+    e.position.copy(m.position);
+    board.add(e);
+  }
+
+  // Goals painted flat. Raised columns read as obstacles, which is the one
+  // confusion this scene cannot afford.
+  const padGeo = new THREE.PlaneGeometry(0.78, 0.78).rotateX(-Math.PI / 2);
+  const padMat = new THREE.MeshBasicMaterial({ color: GOAL_GREEN, transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false });
+  const ringMat = new THREE.LineBasicMaterial({ color: GOAL_GREEN });
+  sc.goals.forEach(([x, y]) => {
+    const p = world(x, y);
+    const pad = new THREE.Mesh(padGeo, padMat);
+    pad.position.copy(p).setY(-0.045);
+    board.add(pad);
+    const ring = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints([
       new THREE.Vector3(-0.39, 0, -0.39), new THREE.Vector3(0.39, 0, -0.39),
       new THREE.Vector3(0.39, 0, 0.39), new THREE.Vector3(-0.39, 0, 0.39),
-    ]), goalLineMat);
-  ring.position.copy(p).setY(-0.04);
-  board.add(ring);
-});
-
-/* drones */
-// Flown well above the obstacle tops. At the old height they sat inside the
-// forest of blocks and became impossible to pick out.
-const FLY = 1.15;
-const droneGeo = new THREE.OctahedronGeometry(0.38);
-const drones = [], trails = [], stems = [];
-for (let i = 0; i < data.numDrones; i++) {
-  const tint = PALETTE[i % PALETTE.length];
-  const mat = new THREE.MeshStandardMaterial({
-    color: tint, roughness: 0.3, metalness: 0.45, flatShading: true,
-    emissive: tint, emissiveIntensity: 0.28,
+    ]), ringMat);
+    ring.position.copy(p).setY(-0.04);
+    board.add(ring);
   });
-  const mesh = new THREE.Mesh(droneGeo, mat);
-  mesh.position.y = FLY;
-  scene.add(mesh);
-  drones.push(mesh);
 
-  // Drop line to the floor, so which cell a drone occupies is never a guess.
-  const stem = new THREE.Line(
-    new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]),
-    new THREE.LineBasicMaterial({ color: tint, transparent: true, opacity: 0.3 })
-  );
-  scene.add(stem);
-  stems.push(stem);
+  const dGeo = new THREE.OctahedronGeometry(0.38);
+  for (let i = 0; i < sc.numDrones; i++) {
+    const tint = PALETTE[i % PALETTE.length];
+    const mesh = new THREE.Mesh(dGeo, new THREE.MeshStandardMaterial({
+      color: tint, roughness: 0.3, metalness: 0.45, flatShading: true,
+      emissive: tint, emissiveIntensity: 0.28,
+    }));
+    mesh.position.y = FLY;
+    scene.add(mesh); drones.push(mesh);
 
-  const line = new THREE.Line(
-    new THREE.BufferGeometry(),
-    new THREE.LineBasicMaterial({ color: tint, transparent: true, opacity: 0.75 })
-  );
-  scene.add(line);
-  trails.push(line);
+    // Ghost: the same drone under the untrained policy, on the same board at the
+    // same step. Wireframe and warm-toned so it never competes with the real one.
+    const g = new THREE.Mesh(dGeo, new THREE.MeshBasicMaterial({
+      color: GHOST, wireframe: true, transparent: true, opacity: 0.6,
+    }));
+    g.position.y = FLY;
+    scene.add(g); ghosts.push(g);
+
+    const stem = new THREE.Line(new THREE.BufferGeometry(),
+      new THREE.LineBasicMaterial({ color: tint, transparent: true, opacity: 0.3 }));
+    scene.add(stem); stems.push(stem);
+
+    const trail = new THREE.Line(new THREE.BufferGeometry(),
+      new THREE.LineBasicMaterial({ color: tint, transparent: true, opacity: 0.75 }));
+    scene.add(trail); trails.push(trail);
+  }
 }
 
 /* playback */
-let run = data.runs[data.runs.length - 1];
-let cursor = 0;      // fractional frame index, so motion between cells is smooth
-let playing = true;
-const SPEED = 3.2;   // frames per second
-
-// Clamped at both ends. The first rAF timestamp can predate the performance.now()
-// captured just before the loop starts, which drives the cursor briefly negative.
-function frameAt(i) {
-  const last = run.frames.length - 1;
-  return run.frames[Math.max(0, Math.min(i, last))];
+function frameAt(r, i) {
+  const last = r.frames.length - 1;
+  return r.frames[Math.max(0, Math.min(i, last))];
 }
 
 function paint() {
   const i = Math.max(0, Math.floor(cursor));
   const t = cursor - i;
-  const a = frameAt(i), b = frameAt(i + 1);
+  const a = frameAt(run, i), b = frameAt(run, i + 1);
+  const showGhost = el('ghost').checked && ghostRun && ghostRun !== run;
 
   for (let d = 0; d < drones.length; d++) {
-    const pa = world(a.positions[d][0], a.positions[d][1]);
-    const pb = world(b.positions[d][0], b.positions[d][1]);
-    drones[d].position.lerpVectors(pa, pb, t).setY(FLY);
+    drones[d].position.lerpVectors(
+      world(a.positions[d][0], a.positions[d][1]),
+      world(b.positions[d][0], b.positions[d][1]), t).setY(FLY);
     drones[d].rotation.y += 0.012;
 
     const home = a.atGoal[d];
     drones[d].material.color.setHex(home ? GOAL_GREEN : PALETTE[d % PALETTE.length]);
     drones[d].material.emissive.setHex(home ? GOAL_GREEN : PALETTE[d % PALETTE.length]);
-    drones[d].material.emissiveIntensity = home ? 0.75 : 0.32;
+    drones[d].material.emissiveIntensity = home ? 0.75 : 0.28;
 
-    const foot = drones[d].position.clone().setY(-0.04);
     stems[d].geometry.dispose();
-    stems[d].geometry = new THREE.BufferGeometry().setFromPoints([drones[d].position.clone(), foot]);
+    stems[d].geometry = new THREE.BufferGeometry().setFromPoints(
+      [drones[d].position.clone(), drones[d].position.clone().setY(-0.04)]);
 
-    const pts = run.frames.slice(0, i + 1).map(f => world(f.positions[d][0], f.positions[d][1]).setY(0.02));
-    pts.unshift(world(data.starts[d][0], data.starts[d][1]).setY(0.02));
+    // Routes are traced on the floor. Drawn at flight height they hang in the
+    // air and read as stray geometry rather than as a path anyone took.
+    const pts = run.frames.slice(0, i + 1)
+      .map(f => world(f.positions[d][0], f.positions[d][1]).setY(0.02));
+    pts.unshift(world(S.starts[d][0], S.starts[d][1]).setY(0.02));
     trails[d].geometry.dispose();
     trails[d].geometry = new THREE.BufferGeometry().setFromPoints(pts);
+
+    ghosts[d].visible = showGhost;
+    if (showGhost) {
+      const ga = frameAt(ghostRun, i), gb = frameAt(ghostRun, i + 1);
+      ghosts[d].position.lerpVectors(
+        world(ga.positions[d][0], ga.positions[d][1]),
+        world(gb.positions[d][0], gb.positions[d][1]), t).setY(FLY);
+      ghosts[d].rotation.y -= 0.012;
+    }
   }
 
   el('s-step').textContent = i + 1;
   el('s-reward').textContent = a.cumulative.toFixed(1);
-  el('s-goal').textContent = `${a.atGoal.filter(Boolean).length}/${data.numDrones}`;
+  el('s-goal').textContent = `${a.atGoal.filter(Boolean).length}/${S.numDrones}`;
   el('s-refused').textContent = run.frames.slice(0, i + 1).reduce((s, f) => s + f.refused, 0);
   el('step').textContent = `${i + 1} / ${run.frames.length}`;
   el('scrub').value = i;
 }
 
+/* curve */
+function drawCurve(sc, activeEpisodes) {
+  const W = 400, H = 116, L = 52, R = 8, T = 10, B = 24;
+  const maxE = Math.max(...sc.curve.map(p => p.episodes));
+  const lo = Math.min(...sc.curve.map(p => p.lo));
+  const hi = Math.max(...sc.curve.map(p => p.hi));
+  const pad = (hi - lo) * 0.08 || 1;
+  const y0 = lo - pad, y1 = hi + pad;
+
+  const px = e => L + (e / maxE) * (W - L - R);
+  const py = v => T + (1 - (v - y0) / (y1 - y0)) * (H - T - B);
+
+  const band = sc.curve.map(p => `${px(p.episodes)},${py(p.hi)}`).join(' ')
+    + ' ' + sc.curve.slice().reverse().map(p => `${px(p.episodes)},${py(p.lo)}`).join(' ');
+  const mean = sc.curve.map(p => `${px(p.episodes)},${py(p.mean)}`).join(' ');
+
+  const ticks = [y0, (y0 + y1) / 2, y1].map(v =>
+    `<line x1="${L}" y1="${py(v)}" x2="${W - R}" y2="${py(v)}" stroke="#222c25" stroke-width="1"/>
+     <text x="${L - 6}" y="${py(v) + 4.5}" fill="#8b938e" font-size="12" text-anchor="end"
+           font-family="ui-monospace,Menlo,monospace">${Math.round(v)}</text>`).join('');
+
+  const zero = (y0 < 0 && y1 > 0)
+    ? `<line x1="${L}" y1="${py(0)}" x2="${W - R}" y2="${py(0)}" stroke="#47514a" stroke-width="1" stroke-dasharray="3 3"/>`
+    : '';
+
+  const marks = sc.runs.map(r => {
+    const on = r.episodes === activeEpisodes;
+    const pt = sc.curve.find(c => c.episodes === r.episodes);
+    if (!pt) return '';
+    return `<line x1="${px(r.episodes)}" y1="${T}" x2="${px(r.episodes)}" y2="${H - B}"
+                  stroke="${on ? '#6faa85' : '#37423b'}" stroke-width="${on ? 1.6 : 1}"/>
+            <circle cx="${px(r.episodes)}" cy="${py(pt.mean)}" r="${on ? 3.8 : 2.4}"
+                    fill="${on ? '#6faa85' : '#8b938e'}"/>`;
+  }).join('');
+
+  const xlab = [0, maxE].map(e =>
+    `<text x="${px(e)}" y="${H - 6}" fill="#8b938e" font-size="12"
+           text-anchor="${e === 0 ? 'start' : 'end'}"
+           font-family="ui-monospace,Menlo,monospace">${e}</text>`).join('');
+
+  el('curve').innerHTML = `${ticks}${zero}
+    <polygon points="${band}" fill="#6faa85" opacity="0.16"/>
+    <polyline points="${mean}" fill="none" stroke="#e8ebe9" stroke-width="1.8"/>
+    ${marks}${xlab}`;
+
+  el('curveSeeds').textContent = `${sc.seeds} seeds, band min to max`;
+
+  const first = sc.curve[0], lastPt = sc.curve[sc.curve.length - 1];
+  const spread = Math.round(lastPt.hi - lastPt.lo);
+  el('curveFoot').innerHTML =
+    `Mean <b style="color:#e8ebe9">${first.mean}</b> to <b style="color:#e8ebe9">${lastPt.mean}</b>, `
+    + `arrivals <b style="color:#e8ebe9">${first.arrived}</b> to <b style="color:#e8ebe9">${lastPt.arrived}</b> of ${sc.numDrones}. `
+    + (spread > 100
+        ? `Final spread <b style="color:#c9a227">${spread}</b>, so the mean is hiding seeds that disagree.`
+        : `Final spread <b style="color:#6faa85">${spread}</b>, so the seeds agree.`);
+}
+
+/* wiring */
 function selectRun(idx) {
-  run = data.runs[idx];
+  run = S.runs[idx];
   cursor = 0;
   el('scrub').max = run.frames.length - 1;
   [...el('runs').children].forEach((b, k) => b.setAttribute('aria-pressed', String(k === idx)));
+  drawCurve(S, run.episodes);
   paint();
 }
 
-data.runs.forEach((r, idx) => {
+function selectScenario(idx) {
+  S = data.scenarios[idx];
+  ghostRun = S.runs.find(r => r.episodes === 0) || null;
+  [...el('scenarios').children].forEach((b, k) => b.setAttribute('aria-pressed', String(k === idx)));
+
+  el('title').textContent = S.name;
+  el('blurb').innerHTML = `${S.blurb} The curve averages ${S.seeds} seeds; the routes below are `
+    + `<b style="color:#e8ebe9">seed ${S.replaySeed}</b>, the median one, so a single run cannot flatter `
+    + `or libel the average. Nothing is simulated here, `
+    + `<span class="mono">scripts/export_trajectory.py</span> recorded every position.`;
+
+  document.querySelector('#rail .rail-label:nth-of-type(1)');
+  [...document.querySelectorAll('.rail-label')][1].textContent = `Checkpoint  ·  seed ${S.replaySeed}`;
+
+  el('runs').innerHTML = '';
+  S.runs.forEach((r, k) => {
+    const b = document.createElement('button');
+    b.className = 'opt'; b.type = 'button'; b.setAttribute('aria-pressed', 'false');
+    b.innerHTML = `<span>${r.label}</span><span class="meta">${r.arrived}/${S.numDrones} home</span>`;
+    b.title = `total reward ${r.totalReward}`;
+    b.addEventListener('click', () => selectRun(k));
+    el('runs').appendChild(b);
+  });
+
+  buildScene(S);
+  selectRun(S.runs.length - 1);
+}
+
+data.scenarios.forEach((sc, idx) => {
   const b = document.createElement('button');
-  b.className = 'run';
-  b.type = 'button';
-  b.setAttribute('aria-pressed', 'false');
-  b.innerHTML = `<span>${r.label}</span><span class="score">${r.arrived}/${data.numDrones} home</span>`;
-  b.title = `${r.detail}, total reward ${r.totalReward}`;
-  b.addEventListener('click', () => selectRun(idx));
-  el('runs').appendChild(b);
+  b.className = 'opt'; b.type = 'button'; b.setAttribute('aria-pressed', 'false');
+  const lastPt = sc.curve[sc.curve.length - 1];
+  b.innerHTML = `<span>${sc.name}</span><span class="meta">${lastPt.arrived}/${sc.numDrones}</span>`;
+  b.title = sc.blurb;
+  b.addEventListener('click', () => selectScenario(idx));
+  el('scenarios').appendChild(b);
 });
 
 el('play').addEventListener('click', () => {
@@ -457,11 +525,10 @@ el('play').addEventListener('click', () => {
   el('play').textContent = playing ? 'Pause' : 'Play';
 });
 el('scrub').addEventListener('input', e => {
-  playing = false;
-  el('play').textContent = 'Play';
-  cursor = Number(e.target.value);
-  paint();
+  playing = false; el('play').textContent = 'Play';
+  cursor = Number(e.target.value); paint();
 });
+el('ghost').addEventListener('change', paint);
 
 addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
@@ -469,16 +536,18 @@ addEventListener('resize', () => {
   renderer.setSize(innerWidth, innerHeight);
 });
 
-selectRun(data.runs.length - 1);
+selectScenario(0);
 el('loading').remove();
 
 let last = performance.now();
 renderer.setAnimationLoop(now => {
-  const dt = Math.min(0.1, Math.max(0, (now - last) / 1000));   // also caps the jump after a tab switch
+  // Clamped both ways. The first rAF timestamp can predate the performance.now()
+  // captured just before the loop starts, and a backgrounded tab returns a jump.
+  const dt = Math.min(0.1, Math.max(0, (now - last) / 1000));
   last = now;
   if (playing) {
     cursor += dt * SPEED;
-    if (cursor >= run.frames.length - 1) cursor = 0;   // loop
+    if (cursor >= run.frames.length - 1) cursor = 0;
   }
   paint();
   controls.update();
