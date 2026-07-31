@@ -15,8 +15,8 @@
 <img alt="python 3.10" src="https://img.shields.io/badge/python-3.10-dfe3e0?style=flat-square&labelColor=0d1410">
 <img alt="PPO in PyTorch 2.2.2" src="https://img.shields.io/badge/PPO-PyTorch_2.2.2-8f9491?style=flat-square&labelColor=0d1410">
 <img alt="env gymnasium" src="https://img.shields.io/badge/env-gymnasium-8f9491?style=flat-square&labelColor=0d1410">
-<img alt="tests 6 passing" src="https://img.shields.io/badge/tests-15_passing-8f9491?style=flat-square&labelColor=0d1410">
-<img alt="coverage 85 percent" src="https://img.shields.io/badge/coverage-84%25-8f9491?style=flat-square&labelColor=0d1410">
+<img alt="tests 15 passing" src="https://img.shields.io/badge/tests-15_passing-8f9491?style=flat-square&labelColor=0d1410">
+<img alt="coverage 84 percent" src="https://img.shields.io/badge/coverage-84%25-8f9491?style=flat-square&labelColor=0d1410">
 <img alt="license Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-8f9491?style=flat-square&labelColor=0d1410">
 
 <br/><br/>
