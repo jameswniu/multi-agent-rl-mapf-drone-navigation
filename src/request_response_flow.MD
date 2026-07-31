@@ -1,124 +1,47 @@
-1\. Client sends a request
+# Request and response flow
 
+## 1. Client sends a request
 
+`POST /predict` with one observation, a row per drone:
 
-Example:
+```json
+{ "state": [[0, 0, 19, 19, 200, 1, 1, 1, 0]] }
+```
 
-POST /predict with JSON body:
+Each row is `[x, y, goal_x, goal_y, steps_remaining, blocked_up, blocked_down,
+blocked_left, blocked_right]`. The number of rows must equal `num_drones` and
+each row must have exactly nine values; either mismatch returns `422` before the
+request reaches the policy.
 
+## 2. Middleware intercepts
 
+`add_metrics` records the start time, then after the endpoint returns it
+increments `api_requests_total` and observes `api_request_latency_seconds`,
+both labelled by method and endpoint, and logs a line such as:
 
-{ "state": { "drone": \[0, 0], "goal": \[5, 5] } }
+```
+2026-07-31 12:34:56 - api.app - INFO - POST /predict completed in 0.032s
+```
 
+## 3. The endpoint runs
 
+The body is validated, then `PPOAgent.predict` returns one greedy action per
+drone. The response carries both the indices and their names:
 
-2\. Middleware intercepts
+```json
+{ "actions": [4], "action_names": ["right"] }
+```
 
+Indices are what `DroneEnv.step()` accepts; names are what a human reads in a
+log. A failure inside the policy is wrapped as an `APIError` and rendered as
+`{"error": "..."}` with status 500.
 
+## 4. Response leaves the API
 
-The add\_metrics middleware runs before the request reaches /predict.
+The middleware finishes timing, the metrics are already updated, and Prometheus
+sees them on its next scrape.
 
+## 5. Monitoring
 
-
-It records the start time.
-
-
-
-After the endpoint finishes, it calculates how long the request took.
-
-
-
-It increments two Prometheus metrics:
-
-
-
-api\_requests\_total{method="POST", endpoint="/predict"}
-
-
-
-api\_request\_latency\_seconds{method="POST", endpoint="/predict"}
-
-
-
-It also writes a log entry like:
-
-
-
-2025-09-08 12:34:56 - src.api.app - INFO - POST /predict completed in 0.032s
-
-
-
-3\. The /predict endpoint runs
-
-
-
-The request body is parsed into a Python dictionary.
-
-
-
-The PPO agent (PPOAgent) calls its predict() method with this state.
-
-
-
-If it succeeds, the action is returned as JSON:
-
-
-
-{ "action": "move\_up" }
-
-
-
-
-
-If something fails (e.g., invalid input), an APIError is raised.
-
-
-
-The error handler converts it into a structured JSON error:
-
-
-
-{ "error": "Prediction failed: invalid state" }
-
-
-
-
-
-Status code 500 is sent back.
-
-
-
-4\. Response leaves API
-
-
-
-The middleware (from step 2) finishes by logging the total time and sending the response back to the client.
-
-
-
-The metrics are already updated, so Prometheus will see them at the next scrape.
-
-
-
-5\. Monitoring systems interact
-
-
-
-Prometheus periodically calls GET /metrics.
-
-
-
-It collects counters/histograms, which include how many requests succeeded, how long they took, etc.
-
-
-
-Kubernetes (or another orchestrator) calls GET /healthz.
-
-
-
-If it gets { "status": "ok" }, it considers the service alive.
-
-
-
-If this fails repeatedly, Kubernetes restarts the container.
-
+Prometheus scrapes `GET /metrics`. The orchestrator polls `GET /healthz` and
+restarts the container if it stops returning `{"status": "ok"}`.

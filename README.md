@@ -303,7 +303,7 @@ Worth reading before the deployment sections. The repository name is older than 
 | `IntegrityStats` reporting across a run | **Implemented** |
 | FastAPI service, `/metrics` and `/healthz` | **Implemented** |
 | Docker image, Compose, Kubernetes manifests, Prometheus and Grafana config | **Implemented** as configuration |
-| `/predict` end to end | **Implemented**. Takes the 5-number observation vector |
+| `/predict` end to end | **Implemented**. Takes one observation row per drone |
 | Hyperparameters from `configs/train.yaml` | **Implemented**. Loaded and applied to `PPOAgent` |
 | Multi-agent, more than one drone | **Implemented**. `num_drones` sets the fleet; shared policy weights across drones |
 | MAPF, multi-agent path finding | **Implemented**. Vertex, swap and stationary conflicts detected and refused each step |
@@ -366,7 +366,7 @@ Roughly in dependency order:
 1. A learned conflict policy. Today conflicts and vetoes are refusals, which is correct but blunt: the drone simply stops. Yielding, by remaining distance or by who is closer to their goal, would be a real coordination signal rather than a stall.
 2. Altitude and return-to-home, the two rules from the low level design the grid cannot express while it is flat.
 
-Done: the Safety Controller vetoes on geofence and separation, multiple drones share the grid with vertex, swap and stationary conflicts refused, obstacles are generated and sensed, the `/predict` contract now takes the 5-number observation vector and is covered by tests that do not stub the agent, and `configs/train.yaml` is loaded and applied rather than silently discarded.
+Done: the Safety Controller vetoes on geofence and separation, multiple drones share the grid with vertex, swap and stationary conflicts refused, obstacles are generated and sensed, the `/predict` contract now takes one observation row per drone and is covered by tests that do not stub the agent, and `configs/train.yaml` is loaded and applied rather than silently discarded.
 
 ---
 
