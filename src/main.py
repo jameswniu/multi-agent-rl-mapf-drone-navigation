@@ -16,6 +16,8 @@ Why separate this?
 
 import argparse
 import os
+
+import numpy as np
 from pathlib import Path
 from typing import Any, Dict
 
@@ -132,7 +134,8 @@ def run_inference(agent, env, rollout_len=5):
         stats.record_env(info)
         total_reward += reward
 
-        print(f"Step {t+1}: action={env.action_map[action]}, reward={reward:.2f}")
+        names = ", ".join(env.action_map[int(a)] for a in np.atleast_1d(action))
+        print(f"Step {t+1}: actions=[{names}], reward={reward:.2f}")
 
         if terminated or truncated:
             break

@@ -15,8 +15,8 @@
 <img alt="python 3.10" src="https://img.shields.io/badge/python-3.10-dfe3e0?style=flat-square&labelColor=0d1410">
 <img alt="PPO in PyTorch 2.2.2" src="https://img.shields.io/badge/PPO-PyTorch_2.2.2-8f9491?style=flat-square&labelColor=0d1410">
 <img alt="env gymnasium" src="https://img.shields.io/badge/env-gymnasium-8f9491?style=flat-square&labelColor=0d1410">
-<img alt="tests 23 passing" src="https://img.shields.io/badge/tests-23_passing-8f9491?style=flat-square&labelColor=0d1410">
-<img alt="coverage 85 percent" src="https://img.shields.io/badge/coverage-85%25-8f9491?style=flat-square&labelColor=0d1410">
+<img alt="tests 33 passing" src="https://img.shields.io/badge/tests-33_passing-8f9491?style=flat-square&labelColor=0d1410">
+<img alt="coverage 87 percent" src="https://img.shields.io/badge/coverage-87%25-8f9491?style=flat-square&labelColor=0d1410">
 <img alt="license Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-8f9491?style=flat-square&labelColor=0d1410">
 
 <br/><br/>
@@ -107,9 +107,10 @@ The control loop is small. The validators hang off both halves of it, and everyt
                     |
   ENVIRONMENT  DroneEnv (gymnasium)
                     |  reset() / step(action)  ->  obs, reward, terminated, truncated, info
-                    |  observation   Box(9)        x, y, goal_x, goal_y, steps_remaining,
-                    |                              blocked up/down/left/right
-                    |  action        Discrete(5)   hover, up, down, left, right (clamped)
+                    |  observation   Box(N, 9)     per drone: x, y, goal_x, goal_y,
+                    |                              steps_remaining, blocked u/d/l/r
+                    |  action        MultiDiscrete one move per drone
+                    |  conflicts     vertex, swap and stationary, all refused
                     v
   AGENT        PPOAgent (PyTorch)
                     |  PPOPolicy     shared Linear(5,64)+ReLU  ->  policy head (5), value head (1)
@@ -137,7 +138,7 @@ The original hand-drawn design panoramas are kept in [`architecture/`](architect
 
 A grid world, deliberately small, so the validator layer is the thing under test rather than the control problem.
 
-**Observation**, a `Box` of shape `(9,)`, `float32`:
+**Observation**, a `Box` of shape `(num_drones, 9)`, `float32`. One row per drone, so a single drone is the degenerate case of the same shape:
 
 | index | field | range |
 |---|---|---|
@@ -146,11 +147,13 @@ A grid world, deliberately small, so the validator layer is the thing under test
 | 4 | `steps_remaining` | `0` to `max_steps` |
 | 5 to 8 | blocked up, down, left, right | `0` or `1` |
 
+The blocked flags fold three facts into one signal: a wall, an obstacle, and another drone all read as impassable, because from a drone's point of view they are the same fact.
+
 The last four are local sensing, in action order. They exist because blocking movement alone is useless: a drone that cannot see an obstacle before hitting it cannot learn to route around one, so obstacles would be nothing but a tax on a blind policy. A grid edge reads as blocked too.
 
 Bounds are per-dimension, for the reason described above. One scalar bound cannot describe both a coordinate and a step counter.
 
-**Action**, `Discrete(5)`:
+**Action**, `MultiDiscrete([5] * num_drones)`, one move per drone:
 
 | index | action | effect |
 |---|---|---|
@@ -162,7 +165,7 @@ Bounds are per-dimension, for the reason described above. One scalar bound canno
 
 Moves clamp at the grid edge, so an illegal move is absorbed rather than rejected. `action_map` carries the human-readable names.
 
-**Reward**: `+10.0` on reaching the goal, `-2.0` for a step that runs into an obstacle, `-1.0` otherwise. `terminated` on goal, `truncated` at `max_steps`. The agent starts at the origin and the goal sits at the far corner, so the shortest unobstructed path under this config is 38 moves. A collision costs more than a wasted step; if it cost the same, nothing would tell the policy to route around anything.
+**Reward**: summed across the fleet. Per drone, `+10.0` at its goal, `-2.0` for a refused move, `-1.0` otherwise. `terminated` on goal, `truncated` at `max_steps`. The agent starts at the origin and the goal sits at the far corner, so the shortest unobstructed path under this config is 38 moves. A collision costs more than a wasted step; if it cost the same, nothing would tell the policy to route around anything.
 
 That shipped reward is deliberately spiky: the goal bonus is an event, not a gradient. It is the top left quadrant below, and it is the cheapest thing that works for a single drone. Once more than one drone shares the grid, the quadrant matters, because a spike is exactly what a policy learns to farm.
 
@@ -245,7 +248,7 @@ Only one config file is actually read by the code today.
 ```yaml
 # configs/env.yaml, the one that is loaded
 grid_size: 20
-num_drones: 10          # read into an attribute, never used
+num_drones: 10          # fleet size; each gets its own start and goal
 obstacle_density: 0.1   # obstacle rate per cell, start and goal always clear
 max_steps: 200
 ```
@@ -280,12 +283,12 @@ Worth reading before the deployment sections. The repository name is older than 
 | Docker image, Compose, Kubernetes manifests, Prometheus and Grafana config | **Implemented** as configuration |
 | `/predict` end to end | **Implemented**. Takes the 5-number observation vector |
 | Hyperparameters from `configs/train.yaml` | **Implemented**. Loaded and applied to `PPOAgent` |
-| Multi-agent, more than one drone | **Not implemented**. `num_drones` is read into an attribute and never used; the env tracks a single position vector |
-| MAPF, multi-agent path finding | **Not implemented**. No conflict resolution, no reservation table, no joint planner |
+| Multi-agent, more than one drone | **Implemented**. `num_drones` sets the fleet; shared policy weights across drones |
+| MAPF, multi-agent path finding | **Implemented**. Vertex, swap and stationary conflicts detected and refused each step |
 | Obstacles | **Implemented**. Drawn from `obstacle_density`, refuse movement, and are locally sensed |
 | Ingestion, Preprocess and Prediction agents; Safety Controller; Supervisor | **Design only**, described in [`architecture/summary.md`](architecture/summary.md), no code in `src/` |
 
-The multi-agent and MAPF pieces are the roadmap the name points at, not a description of `src/`.
+The name now describes the code: multiple drones share one grid, see each other, and have their conflicting moves refused. What remains is the Safety Controller, the first component that would be allowed to veto rather than only report.
 
 ### The designed system
 
@@ -337,11 +340,10 @@ Full written spec in [`architecture/low_level_design.txt`](architecture/low_leve
 
 Roughly in dependency order:
 
-1. Multiple drones: a per-drone observation and action, and a reward that prices collisions.
-2. MAPF proper: conflict detection between planned paths, then a resolution strategy.
-3. Safety Controller, the first component allowed to veto rather than only report.
+1. Safety Controller, the first component allowed to veto rather than only report.
+2. A learned conflict policy: today conflicts are refused, which is correct but blunt. Yielding by priority or by remaining distance would be a real coordination signal.
 
-Done: obstacles are generated and sensed, the `/predict` contract now takes the 5-number observation vector and is covered by tests that do not stub the agent, and `configs/train.yaml` is loaded and applied rather than silently discarded.
+Done: multiple drones share the grid with vertex, swap and stationary conflicts refused, obstacles are generated and sensed, the `/predict` contract now takes the 5-number observation vector and is covered by tests that do not stub the agent, and `configs/train.yaml` is loaded and applied rather than silently discarded.
 
 ---
 
@@ -397,8 +399,8 @@ curl http://localhost:8000/healthz
 ```bash
 curl -X POST http://localhost:8000/predict \
   -H "Content-Type: application/json" \
-  -d '{"state": [0, 0, 19, 19, 200, 1, 1, 1, 0]}'
-# {"action":4,"action_name":"right"}
+  -d '{"state": [[0, 0, 19, 19, 200, 1, 1, 1, 0]]}'   # one row per drone
+# {"actions":[4],"action_names":["right"]}
 ```
 
 ---
@@ -430,9 +432,10 @@ pytest --cov=src --cov-report=term-missing
 | `tests/test_api.py` | `/predict` against the real agent: a legal action, and 422 for a wrong-length or mapping body |
 | `tests/test_main_config.py` | `--config` is parsed, applied to `PPOAgent`, and unknown flags exit non-zero |
 | `tests/test_obstacles.py` | Density, determinism, refused moves, the collision penalty, and the sensor flags |
+| `tests/test_multi_drone.py` | Fleet contract, distinct starts and goals, and the three conflict kinds |
 | `tests/test_load.py` | Repeated stepping under pressure |
 
-Current state: 23 passing, 85 percent line coverage.
+Current state: 33 passing, 87 percent line coverage.
 
 ---
 

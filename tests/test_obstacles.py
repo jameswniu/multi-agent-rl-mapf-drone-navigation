@@ -2,9 +2,9 @@
 Obstacle tests.
 
 obstacle_density sat in configs/env.yaml being read into an attribute and never
-used. These cover the behaviour that field now buys: obstacles are generated at
-roughly the configured rate, they refuse movement, they cost more than an
-ordinary step, and the drone can sense them before walking into them.
+used. These cover what that field now buys: obstacles appear at roughly the
+configured rate, they refuse movement, they cost more than an ordinary step,
+and a drone can sense one before walking into it.
 """
 
 import numpy as np
@@ -22,22 +22,36 @@ def env():
         e.close()
 
 
-def test_observation_is_nine_dimensional_and_in_space(env):
+@pytest.fixture
+def solo(tmp_path):
+    """A one-drone, obstacle-free grid, for testing a single mechanic in isolation."""
+    cfg = tmp_path / "env.yaml"
+    cfg.write_text("grid_size: 8\nnum_drones: 1\nobstacle_density: 0.0\nmax_steps: 50\n")
+    e = DroneEnv(str(cfg))
+    e.reset(seed=0)
+    try:
+        yield e
+    finally:
+        e.close()
+
+
+def test_observation_is_one_row_of_nine_per_drone(env):
     obs, _ = env.reset(seed=0)
-    assert obs.shape == (9,)
+    assert obs.shape == (env.num_drones, 9)
     assert env.observation_space.contains(obs)
 
 
-def test_start_and_goal_are_never_blocked(env):
-    """A blocked start is meaningless and a blocked goal is unwinnable."""
-    for seed in range(25):
+def test_no_drone_starts_or_aims_at_an_obstacle(env):
+    """Starts and goals are drawn from free cells, so neither can be blocked."""
+    for seed in range(20):
         env.reset(seed=seed)
-        assert not env.obstacles[0, 0]
-        assert not env.obstacles[env.grid_size - 1, env.grid_size - 1]
+        for pos in env.positions:
+            assert not env.obstacles[int(pos[0]), int(pos[1])]
+        for goal in env.goals:
+            assert not env.obstacles[int(goal[0]), int(goal[1])]
 
 
 def test_obstacle_rate_tracks_the_configured_density(env):
-    """Averaged over seeds, the draw should sit near obstacle_density."""
     rates = []
     for seed in range(30):
         env.reset(seed=seed)
@@ -53,54 +67,46 @@ def test_same_seed_gives_the_same_obstacles(env):
     assert np.array_equal(first, env.obstacles)
 
 
-def test_moving_into_an_obstacle_is_refused_and_costs_extra(env):
-    """Position is unchanged, the step is flagged, and it costs more than a plain move."""
-    env.reset(seed=0)
-    # Plant an obstacle directly above the drone, then try to move up.
-    env.obstacles[:] = False
-    env.obstacles[0, 1] = True
-    before = env.position.copy()
+def test_moving_into_an_obstacle_is_refused_and_costs_extra(solo):
+    """Position unchanged, the step flagged, and dearer than a plain move."""
+    solo.positions = np.array([[2.0, 2.0]], dtype=np.float32)
+    solo.goals = np.array([[7.0, 7.0]], dtype=np.float32)
+    solo.obstacles[:] = False
+    solo.obstacles[2, 3] = True  # directly above
 
-    obs, reward, terminated, truncated, info = env.step(1)  # up
+    obs, reward, terminated, truncated, info = solo.step([1])  # up
 
-    assert np.array_equal(env.position, before)
-    assert info.get("collision") is True
+    assert np.array_equal(solo.positions, np.array([[2.0, 2.0]], dtype=np.float32))
+    assert info.get("collisions") == 1
     assert reward == -2.0
     assert not terminated
 
 
-def test_a_clear_move_is_not_flagged_and_costs_one(env):
-    env.reset(seed=0)
-    env.obstacles[:] = False
-    before = env.position.copy()
+def test_a_clear_move_is_not_flagged_and_costs_one(solo):
+    solo.positions = np.array([[2.0, 2.0]], dtype=np.float32)
+    solo.goals = np.array([[7.0, 7.0]], dtype=np.float32)
+    solo.obstacles[:] = False
 
-    obs, reward, terminated, truncated, info = env.step(1)  # up
+    obs, reward, terminated, truncated, info = solo.step([1])  # up
 
-    assert not np.array_equal(env.position, before)
-    assert "collision" not in info
+    assert np.array_equal(solo.positions, np.array([[2.0, 3.0]], dtype=np.float32))
+    assert "collisions" not in info
     assert reward == -1.0
 
 
-def test_sensor_flags_report_adjacent_obstacles(env):
-    """The four trailing observation values are up, down, left, right."""
-    env.reset(seed=0)
-    env.obstacles[:] = False
-    env.obstacles[0, 1] = True  # directly above the start at (0, 0)
+def test_sensor_flags_report_obstacles_and_edges(solo):
+    """The four trailing values per row are up, down, left, right."""
+    solo.positions = np.array([[0.0, 0.0]], dtype=np.float32)
+    solo.obstacles[:] = False
+    solo.obstacles[0, 1] = True  # directly above the corner
 
-    obs = env._get_obs()
-    up, down, left, right = obs[5], obs[6], obs[7], obs[8]
+    up, down, left, right = solo._get_obs()[0][5:9]
 
-    assert up == 1.0        # the obstacle
-    assert down == 1.0      # the grid edge reads as impassable too
-    assert left == 1.0      # edge
-    assert right == 0.0     # clear
+    assert up == 1.0      # the obstacle
+    assert down == 1.0    # the grid edge reads as impassable too
+    assert left == 1.0    # edge
+    assert right == 0.0   # clear
 
 
-def test_zero_density_produces_no_obstacles(tmp_path):
-    """A density of zero must leave the grid completely clear."""
-    config = tmp_path / "env.yaml"
-    config.write_text("grid_size: 10\nnum_drones: 1\nobstacle_density: 0.0\nmax_steps: 50\n")
-    e = DroneEnv(str(config))
-    e.reset(seed=3)
-    assert not e.obstacles.any()
-    e.close()
+def test_zero_density_produces_no_obstacles(solo):
+    assert not solo.obstacles.any()

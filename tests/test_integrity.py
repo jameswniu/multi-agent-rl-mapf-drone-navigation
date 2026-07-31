@@ -26,7 +26,8 @@ def test_env_integrity_validator_clean_run():
     """
     env = DroneEnv()
     _, _ = env.reset()
-    _, _, _, _, info = env.step(0)  # action 0 = hover
+    # One action per drone; hovering is always legal.
+    _, _, _, _, info = env.step([0] * env.num_drones)
     assert "integrity_errors" not in info
     env.close()
 
