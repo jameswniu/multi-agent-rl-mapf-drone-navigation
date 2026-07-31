@@ -12,12 +12,12 @@
 <a href="https://github.com/jameswniu/multi-agent-rl-mapf-drone-navigation/actions/workflows/docker.yml"><img src="https://github.com/jameswniu/multi-agent-rl-mapf-drone-navigation/actions/workflows/docker.yml/badge.svg?branch=main" alt="Docker Build"/></a>
 <a href="https://github.com/jameswniu/multi-agent-rl-mapf-drone-navigation/actions/workflows/codeql-analysis.yml"><img src="https://github.com/jameswniu/multi-agent-rl-mapf-drone-navigation/actions/workflows/codeql-analysis.yml/badge.svg?branch=main" alt="CodeQL"/></a>
 
-<img alt="python 3.10" src="https://img.shields.io/badge/python-3.10-d7dee7?style=flat-square&labelColor=12161d">
-<img alt="PPO in PyTorch 2.2.2" src="https://img.shields.io/badge/PPO-PyTorch_2.2.2-8a95a5?style=flat-square&labelColor=12161d">
-<img alt="env gymnasium" src="https://img.shields.io/badge/env-gymnasium-8a95a5?style=flat-square&labelColor=12161d">
-<img alt="tests 6 passing" src="https://img.shields.io/badge/tests-6_passing-8a95a5?style=flat-square&labelColor=12161d">
-<img alt="coverage 85 percent" src="https://img.shields.io/badge/coverage-85%25-8a95a5?style=flat-square&labelColor=12161d">
-<img alt="license Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-8a95a5?style=flat-square&labelColor=12161d">
+<img alt="python 3.10" src="https://img.shields.io/badge/python-3.10-dfe3e0?style=flat-square&labelColor=0d1410">
+<img alt="PPO in PyTorch 2.2.2" src="https://img.shields.io/badge/PPO-PyTorch_2.2.2-8f9491?style=flat-square&labelColor=0d1410">
+<img alt="env gymnasium" src="https://img.shields.io/badge/env-gymnasium-8f9491?style=flat-square&labelColor=0d1410">
+<img alt="tests 6 passing" src="https://img.shields.io/badge/tests-6_passing-8f9491?style=flat-square&labelColor=0d1410">
+<img alt="coverage 85 percent" src="https://img.shields.io/badge/coverage-85%25-8f9491?style=flat-square&labelColor=0d1410">
+<img alt="license Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-8f9491?style=flat-square&labelColor=0d1410">
 
 <br/><br/>
 
