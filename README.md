@@ -15,8 +15,8 @@
 <img alt="python 3.10" src="https://img.shields.io/badge/python-3.10-dfe3e0?style=flat-square&labelColor=0d1410">
 <img alt="PPO in PyTorch 2.2.2" src="https://img.shields.io/badge/PPO-PyTorch_2.2.2-8f9491?style=flat-square&labelColor=0d1410">
 <img alt="env gymnasium" src="https://img.shields.io/badge/env-gymnasium-8f9491?style=flat-square&labelColor=0d1410">
-<img alt="tests 6 passing" src="https://img.shields.io/badge/tests-6_passing-8f9491?style=flat-square&labelColor=0d1410">
-<img alt="coverage 85 percent" src="https://img.shields.io/badge/coverage-85%25-8f9491?style=flat-square&labelColor=0d1410">
+<img alt="tests 6 passing" src="https://img.shields.io/badge/tests-15_passing-8f9491?style=flat-square&labelColor=0d1410">
+<img alt="coverage 85 percent" src="https://img.shields.io/badge/coverage-84%25-8f9491?style=flat-square&labelColor=0d1410">
 <img alt="license Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-8f9491?style=flat-square&labelColor=0d1410">
 
 <br/><br/>
@@ -234,7 +234,7 @@ Only one config file is actually read by the code today.
 | file | read by | status |
 |---|---|---|
 | [`configs/env.yaml`](configs/env.yaml) | `DroneEnv._load_config` | **Live** |
-| [`configs/train.yaml`](configs/train.yaml) | nothing | **Dead**. Referenced only by the broken `scripts/train.sh` |
+| [`configs/train.yaml`](configs/train.yaml) | `main.load_train_config` | **Live**, via `--config` |
 | [`configs/env-prod.yaml`](configs/env-prod.yaml) | nothing | **Dead** |
 | `.env` (see [`.env.example`](.env.example)) | `scripts/run_server.sh` only | Shell-level. No Python module reads an environment variable |
 
@@ -274,8 +274,8 @@ Worth reading before the deployment sections. The repository name is older than 
 | `IntegrityStats` reporting across a run | **Implemented** |
 | FastAPI service, `/metrics` and `/healthz` | **Implemented** |
 | Docker image, Compose, Kubernetes manifests, Prometheus and Grafana config | **Implemented** as configuration |
-| `/predict` end to end | **Broken**, see Known gaps |
-| Hyperparameters from `configs/train.yaml` | **Not wired**, defaults live in Python |
+| `/predict` end to end | **Implemented**. Takes the 5-number observation vector |
+| Hyperparameters from `configs/train.yaml` | **Implemented**. Loaded and applied to `PPOAgent` |
 | Multi-agent, more than one drone | **Not implemented**. `num_drones` is read into an attribute and never used; the env tracks a single position vector |
 | MAPF, multi-agent path finding | **Not implemented**. No conflict resolution, no reservation table, no joint planner |
 | Obstacles | **Not implemented**. `obstacle_density` is read and never used |
@@ -327,29 +327,18 @@ Full written spec in [`architecture/low_level_design.txt`](architecture/low_leve
 
 ### Known gaps
 
-**`/predict` currently rejects every input.** The request schema declares `state: dict`, while `PPOAgent.predict` calls `torch.tensor(state)` and needs a numeric sequence. No body satisfies both:
-
-```
-{"state": [0,0,19,19,200]}   ->  422  pydantic: "Input should be a valid dictionary"
-{"state": {"x": 1, "y": 2}}  ->  500  "Prediction failed: must be real number, not dict"
-```
-
-`tests/test_api.py` does not catch this, because it replaces `PPOAgent` with a stub that returns a constant. The fix is to agree on one contract, most naturally the 5-number observation vector, then make the schema and the agent match. Note that `predict` returns an integer index, while `src/request_response_flow.MD` documents a response of `{"action": "move_up"}`; the same fix should decide whether the API speaks indices or names.
-
-**`scripts/train.sh` does not run.** It invokes `python src/main.py --config configs/train.yaml`, but `main.py` has no argument parsing and the `src/` layout needs the editable install. Use `python -m main`.
-
 **`tests/conftest.py` swallows import errors.** It catches any failure importing the real `DroneEnv` and substitutes a stub. That is why a missing dependency once surfaced as `AttributeError: 'DroneEnv' object has no attribute 'reset'` rather than an import error, and why coverage sat at 38 percent while appearing to exercise the environment.
 
 ### Roadmap
 
 Roughly in dependency order:
 
-1. Fix the `/predict` contract, and cover it with a test that does not stub the agent.
-2. Wire `configs/train.yaml` into `PPOAgent` so hyperparameters stop being Python defaults.
-3. Obstacles, using the `obstacle_density` field that already exists in config.
-4. Multiple drones: a per-drone observation and action, and a reward that prices collisions.
-5. MAPF proper: conflict detection between planned paths, then a resolution strategy.
-6. Safety Controller, the first component allowed to veto rather than only report.
+1. Obstacles, using the `obstacle_density` field that already exists in config.
+2. Multiple drones: a per-drone observation and action, and a reward that prices collisions.
+3. MAPF proper: conflict detection between planned paths, then a resolution strategy.
+4. Safety Controller, the first component allowed to veto rather than only report.
+
+Done: the `/predict` contract now takes the 5-number observation vector and is covered by tests that do not stub the agent, and `configs/train.yaml` is loaded and applied rather than silently discarded.
 
 ---
 
@@ -402,7 +391,12 @@ curl http://localhost:8000/healthz
 # {"status":"ok"}
 ```
 
-`/predict` is reachable but not yet usable. See Known gaps.
+```bash
+curl -X POST http://localhost:8000/predict \
+  -H "Content-Type: application/json" \
+  -d '{"state": [0, 0, 19, 19, 200]}'
+# {"action":1,"action_name":"up"}
+```
 
 ---
 
@@ -410,7 +404,7 @@ curl http://localhost:8000/healthz
 
 | method | path | purpose | status |
 |---|---|---|---|
-| `POST` | `/predict` | Greedy action from the loaded policy | Reachable, contract broken |
+| `POST` | `/predict` | Greedy action from the loaded policy | Working |
 | `GET` | `/metrics` | Prometheus exposition format | Working |
 | `GET` | `/healthz` | Liveness and readiness probe | Working |
 
@@ -430,10 +424,11 @@ pytest --cov=src --cov-report=term-missing
 | `tests/test_integrity.py` | A legal step produces no integrity errors; the policy validator flags negative probabilities, non-finite values and out-of-space actions |
 | `tests/test_training.py` | Train, save and reload, then a short greedy rollout |
 | `tests/test_integration.py` | Environment and agent wired together |
-| `tests/test_api.py` | `/predict` against a stubbed agent |
+| `tests/test_api.py` | `/predict` against the real agent: a legal action, and 422 for a wrong-length or mapping body |
+| `tests/test_main_config.py` | `--config` is parsed, applied to `PPOAgent`, and unknown flags exit non-zero |
 | `tests/test_load.py` | Repeated stepping under pressure |
 
-Current state on `main`: 6 passing, 85 percent line coverage.
+Current state: 15 passing, 84 percent line coverage.
 
 ---
 
