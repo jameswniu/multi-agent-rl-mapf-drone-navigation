@@ -8,12 +8,12 @@
 <a href="https://github.com/jameswniu/multi-agent-rl-mapf-drone-navigation/actions/workflows/docker.yml"><img src="https://github.com/jameswniu/multi-agent-rl-mapf-drone-navigation/actions/workflows/docker.yml/badge.svg?branch=main" alt="Docker Build"/></a>
 <a href="https://github.com/jameswniu/multi-agent-rl-mapf-drone-navigation/actions/workflows/codeql-analysis.yml"><img src="https://github.com/jameswniu/multi-agent-rl-mapf-drone-navigation/actions/workflows/codeql-analysis.yml/badge.svg?branch=main" alt="CodeQL"/></a>
 
-<img alt="python 3.10" src="https://img.shields.io/badge/python-3.10-0ea5e9?style=flat-square&labelColor=0f172a">
-<img alt="PPO in PyTorch 2.2.2" src="https://img.shields.io/badge/PPO-PyTorch_2.2.2-164e63?style=flat-square&labelColor=0f172a">
-<img alt="env gymnasium" src="https://img.shields.io/badge/env-gymnasium-164e63?style=flat-square&labelColor=0f172a">
-<img alt="tests 6 passing" src="https://img.shields.io/badge/tests-6_passing-164e63?style=flat-square&labelColor=0f172a">
-<img alt="coverage 85 percent" src="https://img.shields.io/badge/coverage-85%25-164e63?style=flat-square&labelColor=0f172a">
-<img alt="license Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-164e63?style=flat-square&labelColor=0f172a">
+<img alt="python 3.10" src="https://img.shields.io/badge/python-3.10-d7dee7?style=flat-square&labelColor=12161d">
+<img alt="PPO in PyTorch 2.2.2" src="https://img.shields.io/badge/PPO-PyTorch_2.2.2-8a95a5?style=flat-square&labelColor=12161d">
+<img alt="env gymnasium" src="https://img.shields.io/badge/env-gymnasium-8a95a5?style=flat-square&labelColor=12161d">
+<img alt="tests 6 passing" src="https://img.shields.io/badge/tests-6_passing-8a95a5?style=flat-square&labelColor=12161d">
+<img alt="coverage 85 percent" src="https://img.shields.io/badge/coverage-85%25-8a95a5?style=flat-square&labelColor=12161d">
+<img alt="license Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-8a95a5?style=flat-square&labelColor=12161d">
 
 <br/><br/>
 
@@ -88,33 +88,39 @@ The validators report and continue; they do not halt a run. That is a deliberate
 The control loop is small. The validators hang off both halves of it, and everything they find funnels into one counter.
 
 <p align="center">
-  <img src="assets/architecture.svg" alt="PPO control loop: configs/env.yaml feeds DroneEnv, which exchanges observations and actions with PPOAgent. An IntegrityValidator sits inside the environment and a PolicyIntegrityValidator inside the agent; both report into IntegrityStats. The agent is served behind FastAPI, scraped by Prometheus and Grafana." width="100%">
+  <img src="assets/architecture.svg" alt="Architecture: configs/env.yaml feeds DroneEnv; the PPO agent closes the loop; a validator band watches both sides and reports into IntegrityStats; the policy is served behind FastAPI and scraped by Prometheus." width="100%">
 </p>
-
-The three pink boxes are the subject of this repository. Everything else is scaffolding around them.
 
 <details>
-<summary><b>Original design diagrams</b> (wide panoramas, click through for full size)</summary>
-<br/>
+<summary>Same diagram as text</summary>
 
-These are the hand-drawn system designs from the original build. They are very wide, so they read poorly inline; open each one full size.
-
-<p align="center">
-  <a href="architecture/drone_high_lv_system_design.png"><img src="architecture/drone_high_lv_system_design.png" alt="High level system design" width="100%"></a>
-  <br/><em>High level design.</em> <a href="architecture/drone_high_lv_system_design.png">Open full size</a>
-  <br/><br/>
-  <a href="architecture/drone_low_lv_system_design.png"><img src="architecture/drone_low_lv_system_design.png" alt="Low level system design" width="100%"></a>
-  <br/><em>Low level design.</em> <a href="architecture/drone_low_lv_system_design.png">Open full size</a>
-</p>
-
-<p align="center">
-  <img src="architecture/drones_matrix_RL.png" alt="Reward pattern reference" width="88%">
-  <br/><em>Reward pattern reference: event-based against continuous shaping, on both the self and interaction axes.</em>
-</p>
-
-Written specs live in [`architecture/low_level_design.txt`](architecture/low_level_design.txt) and [`architecture/summary.md`](architecture/summary.md).
+```text
+  CONFIG       configs/env.yaml            grid_size 20, max_steps 200
+                    |
+  ENVIRONMENT  DroneEnv (gymnasium)
+                    |  reset() / step(action)  ->  obs, reward, terminated, truncated, info
+                    |  observation   Box(5)        x, y, goal_x, goal_y, steps_remaining
+                    |  action        Discrete(5)   hover, up, down, left, right (clamped)
+                    v
+  AGENT        PPOAgent (PyTorch)
+                    |  PPOPolicy     shared Linear(5,64)+ReLU  ->  policy head (5), value head (1)
+                    |  update        clipped surrogate, eps_clip 0.2, gamma 0.99, Adam 3e-4
+                    |  act           sample while training, argmax at inference
+                    v
+  VALIDATORS   the subject of this repository
+                    |  IntegrityValidator         obs in space? action legal? reward finite?
+                    |  PolicyIntegrityValidator   probs sum to 1? value finite? action in space?
+                    |  IntegrityStats             drift vs hallucination, as a rate per step
+                    v
+  SERVING      FastAPI  /predict /metrics /healthz  ->  Prometheus + Grafana
+               weights load once from models/ppo_drone.pt
+```
 
 </details>
+
+The bright band is the subject of this repository. Everything else is scaffolding around it.
+
+The original hand-drawn design panoramas are kept in [`architecture/`](architecture/) for provenance. They are not shown here because they were drawn far too wide to read at README scale; the diagrams above are reconstructions of the same material.
 
 ---
 
