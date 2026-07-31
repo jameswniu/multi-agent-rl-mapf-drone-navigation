@@ -85,57 +85,74 @@ The validators report and continue; they do not halt a run. That is a deliberate
 
 ## Architecture
 
+The control loop is small. The validators hang off both halves of it, and everything they find funnels into one counter.
+
 ```mermaid
-flowchart LR
-    CFG["configs/env.yaml<br/>grid 20x20, 200 steps"]
+%%{init: {"theme":"base","themeVariables":{"fontSize":"17px","fontFamily":"ui-sans-serif, system-ui, sans-serif","lineColor":"#64748b"},"flowchart":{"curve":"basis","nodeSpacing":55,"rankSpacing":65,"padding":14}}}%%
+flowchart TB
+    CFG["<b>configs/env.yaml</b><br/>grid 20x20, 200 max steps"]
 
-    subgraph ENV["DroneEnv (gymnasium)"]
-        RESET["reset() to obs, info"]
-        STEP["step(a) to obs, reward,<br/>terminated, truncated, info"]
-        IV["IntegrityValidator<br/>obs / action / reward"]
+    subgraph ENV["&nbsp;DroneEnv&nbsp; (gymnasium)&nbsp;"]
+        direction LR
+        STEP["<b>reset()</b> and <b>step(action)</b><br/>obs, reward, terminated,<br/>truncated, info"]
+        IV["<b>IntegrityValidator</b><br/>observation in space?<br/>action legal? reward finite?"]
+        STEP ==> IV
     end
 
-    subgraph AGENT["PPOAgent (PyTorch)"]
-        NET["PPOPolicy<br/>shared 64, policy head + value head"]
-        PIV["PolicyIntegrityValidator<br/>probs / value / action"]
+    subgraph AGENT["&nbsp;PPOAgent&nbsp; (PyTorch)&nbsp;"]
+        direction LR
+        NET["<b>PPOPolicy</b><br/>shared Linear(5,64) + ReLU<br/>policy head, value head"]
+        PIV["<b>PolicyIntegrityValidator</b><br/>probs sum to 1? value finite?<br/>action in space?"]
+        NET ==> PIV
     end
 
-    STATS["IntegrityStats<br/>drift vs hallucination tallies"]
-    API["FastAPI<br/>/predict  /metrics  /healthz"]
-    PROM["Prometheus + Grafana"]
+    STATS["<b>IntegrityStats</b><br/>drift vs hallucination,<br/>as a rate per step"]
+    API["<b>FastAPI</b><br/>/predict &nbsp;/metrics &nbsp;/healthz"]
+    OPS["<b>Prometheus + Grafana</b>"]
 
     CFG ==> ENV
-    RESET ==> NET
-    STEP ==> IV
-    IV ==> STATS
-    NET ==> PIV
-    PIV ==> STATS
-    NET ==> STEP
+    ENV == "observation" ==> AGENT
+    AGENT == "action" ==> ENV
+    IV -.-> STATS
+    PIV -.-> STATS
     AGENT ==> API
-    API ==> PROM
+    API ==> OPS
 
-    classDef env fill:#0d1b2a,stroke:#00d4ff,stroke-width:3px,color:#00d4ff
-    classDef agent fill:#1b263b,stroke:#b537f2,stroke-width:3px,color:#b537f2
-    classDef guard fill:#1b263b,stroke:#ff006e,stroke-width:3px,color:#ff006e
-    classDef ops fill:#0d1b2a,stroke:#39ff14,stroke-width:2px,color:#39ff14
+    classDef cfg fill:#0d1b2a,stroke:#38bdf8,stroke-width:2px,color:#e2e8f0
+    classDef core fill:#132a3f,stroke:#00d4ff,stroke-width:2px,color:#e2e8f0
+    classDef brain fill:#1b263b,stroke:#b537f2,stroke-width:2px,color:#e2e8f0
+    classDef guard fill:#2a1220,stroke:#ff006e,stroke-width:3px,color:#ffd7e6
+    classDef ops fill:#0d1b2a,stroke:#39ff14,stroke-width:2px,color:#e2e8f0
 
-    class RESET,STEP,CFG env
-    class NET agent
+    class CFG cfg
+    class STEP core
+    class NET brain
     class IV,PIV,STATS guard
-    class API,PROM ops
+    class API,OPS ops
+
+    style ENV fill:#0a1422,stroke:#00d4ff,stroke-width:2px,color:#7dd3fc
+    style AGENT fill:#0a1422,stroke:#b537f2,stroke-width:2px,color:#d8b4fe
 ```
 
-<p align="center">
-  <img src="architecture/drone_high_lv_system_design.png" alt="High level system design" width="80%">
-</p>
+The three pink boxes are the subject of this repository. Everything else is scaffolding around them.
 
 <details>
-<summary><b>Low level design and reward pattern reference</b></summary>
+<summary><b>Original design diagrams</b> (wide panoramas, click through for full size)</summary>
 <br/>
 
+These are the hand-drawn system designs from the original build. They are very wide, so they read poorly inline; open each one full size.
+
 <p align="center">
-  <img src="architecture/drone_low_lv_system_design.png" alt="Low level system design" width="80%"><br/><br/>
-  <img src="architecture/drones_matrix_RL.png" alt="Reward pattern reference" width="80%">
+  <a href="architecture/drone_high_lv_system_design.png"><img src="architecture/drone_high_lv_system_design.png" alt="High level system design" width="100%"></a>
+  <br/><em>High level design.</em> <a href="architecture/drone_high_lv_system_design.png">Open full size</a>
+  <br/><br/>
+  <a href="architecture/drone_low_lv_system_design.png"><img src="architecture/drone_low_lv_system_design.png" alt="Low level system design" width="100%"></a>
+  <br/><em>Low level design.</em> <a href="architecture/drone_low_lv_system_design.png">Open full size</a>
+</p>
+
+<p align="center">
+  <img src="architecture/drones_matrix_RL.png" alt="Reward pattern reference" width="88%">
+  <br/><em>Reward pattern reference: event-based against continuous shaping, on both the self and interaction axes.</em>
 </p>
 
 Written specs live in [`architecture/low_level_design.txt`](architecture/low_level_design.txt) and [`architecture/summary.md`](architecture/summary.md).
