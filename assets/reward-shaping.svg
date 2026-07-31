@@ -20,7 +20,7 @@
   </linearGradient>
 </defs>
 
-<rect x="0" y="0" width="980" height="780" rx="12" fill="url(#bg2)"/>
+<rect x="0" y="0" width="980" height="780" fill="url(#bg2)"/>
 
 <text x="34" y="52" fill="#f2f6fa" font-size="31" font-weight="700">Reward shaping, two axes</text>
 <text x="34" y="79" fill="#93a1b3" font-size="18">A spiky reward invites goal hacking. A continuous one prices the behaviour you actually want.</text>
@@ -39,7 +39,7 @@
 <text x="0" y="0" fill="#aab6c6" font-size="21" font-weight="700" text-anchor="middle" transform="translate(62,613) rotate(-90)">continuous</text>
 <text x="0" y="0" fill="#6f7c8d" font-size="15.5" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" transform="translate(84,613) rotate(-90)">f(alignment_score)</text>
 
-<rect x="118" y="204" width="400" height="258" rx="9" fill="url(#cell)" stroke="#46515f" stroke-width="1.6"/>
+<rect x="118" y="204" width="400" height="258" fill="url(#cell)" stroke="#46515f" stroke-width="1.6"/>
 <text x="140" y="240" fill="#e9eff6" font-size="21" font-weight="700">Spiky on both axes</text>
 <text x="140" y="266" fill="#9dabbc" font-size="18">Unstable. Goal hacking is likely,</text>
 <text x="140" y="288" fill="#9dabbc" font-size="18">because only the spike is paid.</text>
@@ -50,7 +50,7 @@
 <text x="140" y="414" fill="#c3cedd" font-size="17.5">health to finish the route, and yields to</text>
 <text x="140" y="436" fill="#c3cedd" font-size="17.5">peers only when forced at a choke point.</text>
 
-<rect x="546" y="204" width="400" height="258" rx="9" fill="url(#cell)" stroke="#46515f" stroke-width="1.6"/>
+<rect x="546" y="204" width="400" height="258" fill="url(#cell)" stroke="#46515f" stroke-width="1.6"/>
 <text x="568" y="240" fill="#e9eff6" font-size="21" font-weight="700">Spiky on self only</text>
 <text x="568" y="266" fill="#9dabbc" font-size="18">Cooperation looks excellent while</text>
 <text x="568" y="288" fill="#9dabbc" font-size="18">solo navigation quietly degrades.</text>
@@ -61,7 +61,7 @@
 <text x="568" y="414" fill="#c3cedd" font-size="17.5">finish the mission, yet holds perfect</text>
 <text x="568" y="436" fill="#c3cedd" font-size="17.5">formation with its peers throughout.</text>
 
-<rect x="118" y="484" width="400" height="258" rx="9" fill="url(#cell)" stroke="#46515f" stroke-width="1.6"/>
+<rect x="118" y="484" width="400" height="258" fill="url(#cell)" stroke="#46515f" stroke-width="1.6"/>
 <text x="140" y="520" fill="#e9eff6" font-size="21" font-weight="700">Spiky on peers only</text>
 <text x="140" y="546" fill="#9dabbc" font-size="18">Flies itself well, but competes</text>
 <text x="140" y="568" fill="#9dabbc" font-size="18">whenever cooperation is not scored.</text>
@@ -72,7 +72,7 @@
 <text x="140" y="694" fill="#c3cedd" font-size="17.5">but will cut in front of a peer to reach</text>
 <text x="140" y="716" fill="#c3cedd" font-size="17.5">the drop zone first.</text>
 
-<rect x="546" y="484" width="400" height="258" rx="9" fill="url(#cellBest)" stroke="url(#chrome2)" stroke-width="2.6"/>
+<rect x="546" y="484" width="400" height="258" fill="url(#cellBest)" stroke="url(#chrome2)" stroke-width="2.6"/>
 <text x="568" y="520" fill="#ffffff" font-size="21" font-weight="700">Continuous on both axes</text>
 <text x="568" y="546" fill="#c3cedd" font-size="18">The stable quadrant. Every second is</text>
 <text x="568" y="568" fill="#c3cedd" font-size="18">priced, so there is no spike to chase.</text>
