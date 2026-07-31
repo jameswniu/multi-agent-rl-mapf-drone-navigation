@@ -117,35 +117,35 @@ An honest reading of this repository is that the harness is finished and the lea
 
 <div align="center">
   <a href="https://jameswniu.github.io/multi-agent-rl-mapf-drone-navigation/sim.html">
-    <img src="assets/sim-preview.png" alt="Browser viewer: four drones on an eight by eight grid, one of them green because it has reached its goal, with obstacles as raised blocks, goals as flat green pads, and each drone's route traced on the floor" width="100%">
+    <img src="assets/sim-preview.png" alt="Browser viewer: four drones on an eight by eight grid, one of them green because it has reached its goal, with wireframe ghosts showing where the untrained policy was at the same step, obstacles as raised blocks, goals as flat green pads, and a learning curve with a shaded seed band" width="100%">
   </a>
   <br>
   <a href="https://jameswniu.github.io/multi-agent-rl-mapf-drone-navigation/sim.html"><b>Open the viewer</b></a>
 </div>
 
-Four drones, an 8x8 grid, and the same fixed layout replayed at four points during a single training run. Orbit with the mouse, scrub the timeline, switch checkpoints from the panel on the right.
+Both profiles, side by side, because the claim this repository makes is a split one. Orbit with the mouse, scrub the timeline, switch scenario and checkpoint from the right, and leave the ghost on to see where the untrained policy was at the same step.
 
-Nothing in it is simulated in the browser. `scripts/export_trajectory.py` plays greedy episodes against a live policy and writes every position to `docs/trajectory.json`; the page draws that file and computes nothing of its own. Greedy rather than sampled, because training reward is noisy while the policy is still exploring and the honest question is what it would do if you asked it now.
+Nothing is simulated in the browser. `scripts/export_trajectory.py` plays greedy episodes against a live policy and writes every position to `docs/trajectory.json`; the page draws that file and computes nothing of its own. Greedy rather than sampled, because training reward is noisy while the policy is still exploring and the honest question is what it would do if you asked it now.
 
-| checkpoint | total reward | reached goal | moves refused |
+| profile | mean reward, 5 seeds | drones home | spread across seeds at 2000 |
 |---|---|---|---|
-| Untrained | `-154.27` | 0 of 4 | 0 |
-| 500 episodes | `-132.54` | 0 of 4 | 0 |
-| 1000 episodes | `-182.33` | 0 of 4 | 40 |
-| 2000 episodes | `+182.33` | 1 of 4 | 0 |
+| One drone, 5x5 | `-28.49` to `+11.06` | `0.0` to `1.0` of 1 | **`0`** |
+| Four drones, 8x8 | `-89.72` to `+182.93` | `0.2` to `0.8` of 4 | **`491`** |
 
-Two things in that table are worth more than the headline improvement.
+That last column is the whole story, and it is why the curve is drawn as a band rather than a line.
 
-**It gets worse before it gets better.** The 1000-episode checkpoint is below where it started, and its 40 refusals are one per step: the drones found each other and deadlocked. Learning here is not monotonic, and a run reported only at its endpoints would hide that.
+**On the small profile the seeds agree completely.** All five land on exactly `+11.06` with the drone home. That is convergence, and it is reproducible.
 
-**The reward moves further than the arrivals do.** Reward improves by 336 while exactly one more drone gets home. The shaping term pays for movement toward a goal, and a policy can collect most of it by drifting the right way forever without ever finishing. In the last four steps of the trained run the per-step reward is `+7.23` repeated, which is one drone parked on its goal and the other three still wandering.
+**On the multi-drone profile they do not agree at all.** Across five seeds the final reward runs from `-145.64` to `+345.77`. One seed never gets above where it started. The mean improves by 273 and means very little, because it is averaging runs that did different things.
 
-The matching `-182.33` and `+182.33` are a coincidence, not a sign error. The per-step distributions behind them share no values.
+**Reward moves further than arrivals do,** on both profiles but worse on the second: mean arrivals go from 0.2 to 0.8 of four drones. Shaping pays for movement toward a goal, and a policy can collect most of that by drifting the right way forever without finishing.
+
+Two details in the viewer exist to keep it honest. The replayed routes are the **median seed**, not the first one, so a single lucky or unlucky run cannot flatter or libel the average printed beside it. And an early single-seed export scored *better untrained* than after 2000 episodes, which was network initialisation luck; that is why torch is now seeded and the curve is averaged.
 
 Regenerate it against your own run with:
 
 ```bash
-python scripts/export_trajectory.py --episodes 2000 --out docs/trajectory.json
+python scripts/export_trajectory.py --seeds 5 --out docs/trajectory.json
 ```
 
 ---
