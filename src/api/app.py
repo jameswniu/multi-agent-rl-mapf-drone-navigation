@@ -7,9 +7,10 @@
 #  - Error handling (so the API fails gracefully)
 #  - Health check endpoint (so Kubernetes can verify the service is alive)
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import PlainTextResponse, JSONResponse
 from pydantic import BaseModel
+from typing import List
 import time
 
 # Prometheus metrics utilities
@@ -28,8 +29,15 @@ from src.agents.ppo_agent import PPOAgent
 
 
 class StateInput(BaseModel):
-    """Schema for the prediction request body."""
-    state: dict
+    """Schema for the prediction request body.
+
+    ``state`` is one environment observation, flat and in the order the
+    environment emits it: ``[x, y, goal_x, goal_y, steps_remaining]``. It is a
+    list of numbers rather than a mapping because that is what the policy
+    consumes; ``PPOAgent.predict`` builds a tensor straight from it.
+    """
+
+    state: List[float]
 
 
 # -------------------------------------------------
@@ -86,16 +94,30 @@ async def add_metrics(request: Request, call_next):
 def predict(payload: StateInput):
     """
     Accepts a payload matching :class:`StateInput` and returns the agent's action.
-    Example request: { "state": {...} }
-    Example response: { "action": ... }
+
+    Example request:  { "state": [0, 0, 19, 19, 200] }
+    Example response: { "action": 4, "action_name": "right" }
+
+    The action is returned both ways on purpose. The index is what the
+    environment's ``step()`` accepts; the name is what a human reads in a log.
     """
     logger.info("Received predict request")
+
+    expected = int(env.observation_space.shape[0])
+    if len(payload.state) != expected:
+        # A wrong-length observation is a client error, not a server fault, so
+        # it is rejected before it can reach the policy as an opaque failure.
+        raise HTTPException(
+            status_code=422,
+            detail=f"state must have exactly {expected} values, got {len(payload.state)}",
+        )
+
     try:
         action = agent.predict(payload.state)
     except Exception as e:
         # Wrap raw exceptions in a clean APIError
         raise APIError(f"Prediction failed: {str(e)}", status_code=500)
-    return {"action": action}
+    return {"action": action, "action_name": env.action_map[action]}
 
 
 @app.get("/metrics")
