@@ -102,7 +102,15 @@ def test_render_draws_drones_goals_and_obstacles(tmp_path):
     cfg.write_text("grid_size: 5\nnum_drones: 2\nobstacle_density: 0.0\nmax_steps: 20\nfixed_layout: true\n")
     env = DroneEnv(str(cfg))
     env.reset(seed=0)
-    env.obstacles[2, 2] = True
+
+    # Pick a cell no drone or goal already occupies. render() draws obstacles
+    # first and paints goals and drones over them, so a hardcoded cell can be
+    # silently covered and the assertion then tests nothing.
+    taken = {(int(x), int(y)) for x, y in env.positions}
+    taken |= {(int(x), int(y)) for x, y in env.goals}
+    free = next((x, y) for x in range(env.grid_size) for y in range(env.grid_size)
+                if (x, y) not in taken)
+    env.obstacles[free] = True
 
     art = env.render()
     rows = art.splitlines()

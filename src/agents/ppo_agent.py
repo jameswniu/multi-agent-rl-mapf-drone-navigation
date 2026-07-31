@@ -75,8 +75,18 @@ class PPOAgent:
     - save(path)/load(path) -> persist model weights
     """
 
-    def __init__(self, env, lr=3e-4, gamma=0.99, eps_clip=0.2, epochs=3):
+    def __init__(self, env, lr=3e-4, gamma=0.99, eps_clip=0.2, epochs=3, action_masking=None):
         self.env = env
+        # Invalid action masking. The observation already reports which moves are
+        # blocked, so a drone should never have to walk into a wall to find out.
+        # Masking removes those actions from the distribution outright, which is
+        # the difference between a rule the policy must learn and a rule it
+        # cannot break. Only unilaterally knowable cases are maskable: a wall, an
+        # obstacle, or a neighbour standing still. Two drones entering the same
+        # cell is a joint event and stays with the environment's conflict rule.
+        if action_masking is None:
+            action_masking = bool(getattr(env, "config", {}).get("action_masking", True))
+        self.action_masking = action_masking
         self.gamma = gamma       # discount factor
         self.eps_clip = eps_clip # PPO clipping parameter
         self.epochs = epochs     # policy update iterations
@@ -94,6 +104,21 @@ class PPOAgent:
 
         # Attach validator for drift/hallucination checks
         self.validator = PolicyIntegrityValidator(env.action_space)
+
+    def _mask_probs(self, state, probs):
+        """Zero out moves the observation already reports as blocked.
+
+        Observation columns 5 to 8 are blocked_up, blocked_down, blocked_left
+        and blocked_right, matching action indices 1 to 4. Hover is index 0 and
+        is always legal, so the renormalised distribution can never be empty.
+        """
+        if not self.action_masking:
+            return probs
+        flags = torch.as_tensor(np.atleast_2d(np.asarray(state))[..., 5:9], dtype=probs.dtype)
+        mask = torch.ones_like(probs)
+        mask[..., 1:5] = 1.0 - flags.reshape(mask[..., 1:5].shape)
+        masked = probs * mask
+        return masked / masked.sum(dim=-1, keepdim=True).clamp_min(1e-8)
 
     def _guard_probs(self, probs, value):
         """Report a non-finite policy output as drift before it can crash."""
@@ -114,6 +139,7 @@ class PPOAgent:
         """
         state = torch.tensor(np.asarray(state), dtype=torch.float32)
         probs, value = self.policy(state)
+        probs = self._mask_probs(state, probs)
         # Check before Categorical is constructed. Categorical validates the
         # simplex itself and raises on a nan, which would pre-empt the validator
         # and surface a torch constraint error instead of the drift report this
@@ -185,6 +211,11 @@ class PPOAgent:
 
                 # Forward pass
                 probs, values = self.policy(states_t)
+                # The same mask must be applied here. Sampling from a masked
+                # distribution and then scoring those actions against an
+                # unmasked one makes the PPO ratio compare two different
+                # distributions, which silently corrupts every update.
+                probs = self._mask_probs(states_t.numpy(), probs)
                 m = Categorical(probs)
                 # Sum across drones so each timestep has one joint log probability.
                 new_log_probs = m.log_prob(actions_t).sum(dim=-1)
@@ -241,6 +272,7 @@ class PPOAgent:
         """
         state = torch.tensor(np.asarray(state), dtype=torch.float32)
         probs, value = self.policy(state)
+        probs = self._mask_probs(state, probs)
         self._guard_probs(probs, value)
         action = torch.argmax(probs, dim=-1).detach().numpy()
 
