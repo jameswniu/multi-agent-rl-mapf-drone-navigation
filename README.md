@@ -15,8 +15,8 @@
 <img alt="python 3.10" src="https://img.shields.io/badge/python-3.10-dfe3e0?style=flat-square&labelColor=0d1410">
 <img alt="PPO in PyTorch 2.2.2" src="https://img.shields.io/badge/PPO-PyTorch_2.2.2-8f9491?style=flat-square&labelColor=0d1410">
 <img alt="env gymnasium" src="https://img.shields.io/badge/env-gymnasium-8f9491?style=flat-square&labelColor=0d1410">
-<img alt="tests 33 passing" src="https://img.shields.io/badge/tests-33_passing-8f9491?style=flat-square&labelColor=0d1410">
-<img alt="coverage 87 percent" src="https://img.shields.io/badge/coverage-87%25-8f9491?style=flat-square&labelColor=0d1410">
+<img alt="tests 42 passing" src="https://img.shields.io/badge/tests-42_passing-8f9491?style=flat-square&labelColor=0d1410">
+<img alt="coverage 88 percent" src="https://img.shields.io/badge/coverage-88%25-8f9491?style=flat-square&labelColor=0d1410">
 <img alt="license Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-8f9491?style=flat-square&labelColor=0d1410">
 
 <br/><br/>
@@ -87,7 +87,26 @@ Two validators in [`src/integrity_validators.py`](src/integrity_validators.py), 
   - Hallucination errors: 0 (0.00% of steps)
 ```
 
-The validators report and continue; they do not halt a run. That is a deliberate choice for a training loop and the wrong one for a flight controller, which is what the Safety Controller in the roadmap is for.
+The validators report and continue; they do not halt a run. That is the right call for a training loop and the wrong one for anything that flies, which is why the [Safety Controller](#the-safety-controller) exists as a separate component. Reporting and refusing are different jobs and are kept in different objects.
+
+---
+
+## The Safety Controller
+
+The one component here allowed to **veto**. Everything else in the integrity layer describes what happened; this changes what happens. It sits between the policy's proposal and the environment's movement resolution, so a move it refuses never reaches conflict resolution at all.
+
+Two rules, both geometric, because a rule that cannot be checked cheaply on every tick is a rule that gets skipped on a busy one.
+
+| rule | config | refuses |
+|---|---|---|
+| Geofence | `geofence_margin` | Any move into the margin around the grid border. Drones are never spawned inside it either |
+| Separation | `min_separation` | Any move ending closer than this Chebyshev distance to another drone |
+
+Both default to permissive. A controller that changed behaviour the moment it was installed would make its effect impossible to separate from the policy's.
+
+**Separation defaults to `0`, not `1`, for a sharper reason.** Two drones in one cell is distance 0, and that case already belongs to the environment's vertex-conflict rule, which refuses *both* movers. A separation rule of `1` would race that rule and settle it first, letting whichever drone happened to be checked first proceed. That is a priority tie-break wearing a safety rule's clothes, and it teaches the policy that some drones always win. The same reasoning makes separation vetoes symmetric: both movers are refused, never just the one the loop reached first.
+
+A drone holding position is never vetoed, including one already inside a forbidden region. Moving it because its current cell became illegal would be worse than leaving it put, and the controller must never manufacture a move it was not asked for.
 
 ---
 
@@ -251,6 +270,9 @@ grid_size: 20
 num_drones: 10          # fleet size; each gets its own start and goal
 obstacle_density: 0.1   # obstacle rate per cell, start and goal always clear
 max_steps: 200
+safety:
+  geofence_margin: 0    # border cells that are off limits; 0 uses the whole grid
+  min_separation: 0     # minimum Chebyshev spacing; 0 leaves it to conflict resolution
 ```
 
 `DroneEnv` resolves a relative config path against the repository root, so it works the same from the repo root, from `src/`, and inside the container. If PyYAML is missing it falls back to a minimal line parser rather than failing.
@@ -286,7 +308,8 @@ Worth reading before the deployment sections. The repository name is older than 
 | Multi-agent, more than one drone | **Implemented**. `num_drones` sets the fleet; shared policy weights across drones |
 | MAPF, multi-agent path finding | **Implemented**. Vertex, swap and stationary conflicts detected and refused each step |
 | Obstacles | **Implemented**. Drawn from `obstacle_density`, refuse movement, and are locally sensed |
-| Ingestion, Preprocess and Prediction agents; Safety Controller; Supervisor | **Design only**, described in [`architecture/summary.md`](architecture/summary.md), no code in `src/` |
+| Safety Controller | **Implemented**. Geofence and separation, the only component permitted to veto |
+| Ingestion, Preprocess and Prediction agents; Supervisor | **Design only**, described in [`architecture/summary.md`](architecture/summary.md), no code in `src/` |
 
 The name now describes the code: multiple drones share one grid, see each other, and have their conflicting moves refused. What remains is the Safety Controller, the first component that would be allowed to veto rather than only report.
 
@@ -340,10 +363,10 @@ Full written spec in [`architecture/low_level_design.txt`](architecture/low_leve
 
 Roughly in dependency order:
 
-1. Safety Controller, the first component allowed to veto rather than only report.
-2. A learned conflict policy: today conflicts are refused, which is correct but blunt. Yielding by priority or by remaining distance would be a real coordination signal.
+1. A learned conflict policy. Today conflicts and vetoes are refusals, which is correct but blunt: the drone simply stops. Yielding, by remaining distance or by who is closer to their goal, would be a real coordination signal rather than a stall.
+2. Altitude and return-to-home, the two rules from the low level design the grid cannot express while it is flat.
 
-Done: multiple drones share the grid with vertex, swap and stationary conflicts refused, obstacles are generated and sensed, the `/predict` contract now takes the 5-number observation vector and is covered by tests that do not stub the agent, and `configs/train.yaml` is loaded and applied rather than silently discarded.
+Done: the Safety Controller vetoes on geofence and separation, multiple drones share the grid with vertex, swap and stationary conflicts refused, obstacles are generated and sensed, the `/predict` contract now takes the 5-number observation vector and is covered by tests that do not stub the agent, and `configs/train.yaml` is loaded and applied rather than silently discarded.
 
 ---
 
@@ -433,9 +456,10 @@ pytest --cov=src --cov-report=term-missing
 | `tests/test_main_config.py` | `--config` is parsed, applied to `PPOAgent`, and unknown flags exit non-zero |
 | `tests/test_obstacles.py` | Density, determinism, refused moves, the collision penalty, and the sensor flags |
 | `tests/test_multi_drone.py` | Fleet contract, distinct starts and goals, and the three conflict kinds |
+| `tests/test_safety_controller.py` | Geofence and separation vetoes, veto symmetry, and that permissive defaults change nothing |
 | `tests/test_load.py` | Repeated stepping under pressure |
 
-Current state: 33 passing, 87 percent line coverage.
+Current state: 42 passing, 88 percent line coverage.
 
 ---
 

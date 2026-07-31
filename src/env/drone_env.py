@@ -15,6 +15,7 @@ except Exception:  # pragma: no cover
     yaml = None
 
 from integrity_validators import IntegrityValidator
+from safety_controller import SafetyController
 
 # Observation values per drone, before the four sensor flags.
 _BASE_FEATURES = 5
@@ -76,6 +77,9 @@ class DroneEnv(gym.Env):
         self.action_map = {0: "hover", 1: "up", 2: "down", 3: "left", 4: "right"}
 
         self.validator = IntegrityValidator(self.action_space, self.observation_space)
+        # The validators report; this one refuses. It is the only component here
+        # permitted to change what happens rather than just describe it.
+        self.safety = SafetyController(self.grid_size, self.config.get("safety"))
 
         self.positions = np.zeros((self.num_drones, 2), dtype=np.float32)
         self.goals = np.zeros((self.num_drones, 2), dtype=np.float32)
@@ -124,6 +128,8 @@ class DroneEnv(gym.Env):
         rewarded for crowding a single square.
         """
         free = self._free_cells()
+        # Never spawn a drone somewhere the geofence would immediately trap it.
+        free = np.array([c for c in free if self.safety.in_geofence(int(c[0]), int(c[1]))])
         needed = 2 * self.num_drones
         if len(free) < needed:
             raise ValueError(
@@ -224,6 +230,12 @@ class DroneEnv(gym.Env):
             else:
                 intended.append((int(tx), int(ty)))
 
+        # The Safety Controller arbitrates before drones are compared with each
+        # other, so a move it refuses never reaches conflict resolution at all.
+        intended, veto_reasons = self.safety.review(current, intended)
+        for idx in veto_reasons:
+            collided[idx] = True
+
         # Pass 2: drone against drone, repeated until nothing else gives way.
         for _ in range(self.num_drones + 1):
             changed = False
@@ -267,6 +279,9 @@ class DroneEnv(gym.Env):
         info: Dict[str, Any] = {"at_goal": int(at_goal.sum())}
         if any(collided):
             info["collisions"] = int(sum(collided))
+        if veto_reasons:
+            info["safety_vetoes"] = len(veto_reasons)
+            info["veto_reasons"] = sorted(set(veto_reasons.values()))
 
         errors = self.validator.validate(obs, actions, reward)
         if errors:
