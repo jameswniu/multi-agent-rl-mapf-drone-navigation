@@ -1,0 +1,132 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 1300" width="980" height="1300" role="img" aria-label="Low level design: an on-drone actor pipeline from ingestion through preprocess and policy to a safety controller, bounded queues between each stage, gRPC and REST interfaces to a server side of ingest gateway, stream processor, analytics, weight learner and config API, under a 25 millisecond per-tick budget" font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif">
+<defs>
+  <linearGradient id="lbg" x1="0" y1="0" x2="0.4" y2="1">
+    <stop offset="0" stop-color="#0b120e"/>
+    <stop offset="0.55" stop-color="#070b08"/>
+    <stop offset="1" stop-color="#040705"/>
+  </linearGradient>
+  <pattern id="lgrid" width="26" height="26" patternUnits="userSpaceOnUse">
+    <circle cx="1" cy="1" r="0.7" fill="#121a14"/>
+  </pattern>
+  <linearGradient id="lchrome" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0" stop-color="#6d716f"/>
+    <stop offset="0.28" stop-color="#e8ebe9"/>
+    <stop offset="0.5" stop-color="#9ba09d"/>
+    <stop offset="0.72" stop-color="#fafbfa"/>
+    <stop offset="1" stop-color="#767b78"/>
+  </linearGradient>
+  <linearGradient id="lpanel" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#172018"/>
+    <stop offset="1" stop-color="#0f1510"/>
+  </linearGradient>
+  <linearGradient id="lpanelLive" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#202c23"/>
+    <stop offset="1" stop-color="#141c16"/>
+  </linearGradient>
+  <marker id="la" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+    <path d="M0,0 L10,5 L0,10 z" fill="#949a96"/>
+  </marker>
+</defs>
+
+<rect x="0" y="0" width="980" height="1300" fill="url(#lbg)"/>
+<rect x="0" y="0" width="980" height="1300" fill="url(#lgrid)"/>
+
+<text x="34" y="46" fill="#6faa85" font-size="15" font-weight="700" letter-spacing="3.4" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">LOW LEVEL DESIGN</text>
+<text x="34" y="88" fill="#f2f5f3" font-size="34" font-weight="700">Drone and server</text>
+<text x="34" y="118" fill="#939a95" font-size="19">The full designed system. None of this band exists in src/ today.</text>
+<rect x="700" y="30" width="1" height="62" fill="#333d36"/>
+<text x="946" y="52" fill="#979e99" font-size="17" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">25 ms tick budget</text>
+<text x="946" y="78" fill="#979e99" font-size="17" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">Q1 64 / Q2 64 / Q3 128</text>
+
+<text x="34" y="164" fill="#6faa85" font-size="16" font-weight="700" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">01</text>
+<text x="68" y="164" fill="#c8cec9" font-size="17" font-weight="700" letter-spacing="2.2">ON DRONE</text>
+<text x="216" y="164" fill="#757c77" font-size="18">actors with bounded queues between every stage</text>
+<line x1="34" y1="178" x2="946" y2="178" stroke="#222c25" stroke-width="1"/>
+
+<rect x="34" y="194" width="912" height="62" fill="url(#lpanel)" stroke="#47514a" stroke-width="1.5"/>
+<text x="56" y="222" fill="#ecefed" font-size="20" font-weight="700">Root Supervisor</text>
+<text x="56" y="246" fill="#a5aca7" font-size="17">restarts crashed agents, enforces deadlines, GPS and PTP time sync</text>
+<text x="924" y="234" fill="#838a85" font-size="16" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">health beacon 200 ms</text>
+
+<rect x="34" y="272" width="912" height="62" fill="url(#lpanel)" stroke="#47514a" stroke-width="1.5"/>
+<text x="56" y="300" fill="#ecefed" font-size="20" font-weight="700">Ingestion actors</text>
+<text x="56" y="324" fill="#a5aca7" font-size="17">one per bus: IMU, GPS, LiDAR, camera. Emits Frame{seq, ts, payload}</text>
+<text x="924" y="312" fill="#838a85" font-size="16" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">Q1 bounded 64 / 5 ms</text>
+
+<path d="M 490 334 L 490 348" stroke="#949a96" stroke-width="1.8" fill="none" marker-end="url(#la)"/>
+
+<rect x="34" y="356" width="912" height="62" fill="url(#lpanel)" stroke="#47514a" stroke-width="1.5"/>
+<text x="56" y="384" fill="#ecefed" font-size="20" font-weight="700">Preprocess pipeline</text>
+<text x="56" y="408" fill="#a5aca7" font-size="17">calibrate, filter, fuse, deterministic. Emits Features[list[float]]</text>
+<text x="924" y="396" fill="#838a85" font-size="16" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">Q2 bounded 64 / 8 ms</text>
+
+<path d="M 490 418 L 490 432" stroke="#949a96" stroke-width="1.8" fill="none" marker-end="url(#la)"/>
+
+<rect x="34" y="440" width="912" height="62" fill="url(#lpanel)" stroke="#47514a" stroke-width="1.5"/>
+<text x="56" y="468" fill="#ecefed" font-size="20" font-weight="700">Policy service</text>
+<text x="56" y="492" fill="#a5aca7" font-size="17">candidate generator plus alignment scorer, weighted by the constitution</text>
+<text x="924" y="480" fill="#838a85" font-size="16" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">Q3 bounded 128 / 7 ms</text>
+
+<path d="M 490 502 L 490 516" stroke="#949a96" stroke-width="1.8" fill="none" marker-end="url(#la)"/>
+
+<rect x="34" y="524" width="912" height="66" fill="url(#lpanelLive)" stroke="url(#lchrome)" stroke-width="2.2"/>
+<text x="56" y="552" fill="#ffffff" font-size="20" font-weight="700">Safety Controller</text>
+<text x="56" y="578" fill="#ccd2ce" font-size="17">geofence, separation, altitude, return to home. Final arbiter, overrides any action</text>
+<text x="924" y="564" fill="#a5aca7" font-size="16" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">5 ms</text>
+
+<rect x="34" y="606" width="912" height="56" fill="url(#lpanel)" stroke="#47514a" stroke-width="1.5"/>
+<text x="56" y="632" fill="#ecefed" font-size="20" font-weight="700">Black Box</text>
+<text x="56" y="654" fill="#a5aca7" font-size="17">ring buffer of agent logs, decisions and overrides for the last N minutes</text>
+
+<text x="34" y="710" fill="#6faa85" font-size="16" font-weight="700" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">02</text>
+<text x="68" y="710" fill="#c8cec9" font-size="17" font-weight="700" letter-spacing="2.2">INTERFACES</text>
+<text x="232" y="710" fill="#757c77" font-size="18">data plane stays internal, control plane is externalised</text>
+<line x1="34" y1="724" x2="946" y2="724" stroke="#222c25" stroke-width="1"/>
+
+<rect x="34" y="740" width="440" height="150" fill="url(#lpanel)" stroke="#47514a" stroke-width="1.5"/>
+<text x="56" y="770" fill="#ecefed" font-size="20" font-weight="700">gRPC, data plane</text>
+<text x="56" y="798" fill="#a5aca7" font-size="16.5" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">AppendEvents(stream) -> Ack</text>
+<text x="56" y="822" fill="#a5aca7" font-size="16.5" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">HealthBeat(HealthMsg) -> Ack</text>
+<text x="56" y="846" fill="#a5aca7" font-size="16.5" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">Decide(stream Observation)</text>
+<text x="56" y="874" fill="#838a85" font-size="16">mTLS, deadlines 50 to 100 ms, idempotent on (drone_id, seq)</text>
+
+<rect x="506" y="740" width="440" height="150" fill="url(#lpanel)" stroke="#47514a" stroke-width="1.5"/>
+<text x="528" y="770" fill="#ecefed" font-size="20" font-weight="700">REST, control plane</text>
+<text x="528" y="798" fill="#a5aca7" font-size="16.5" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">GET  /v1/constitution</text>
+<text x="528" y="822" fill="#a5aca7" font-size="16.5" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">POST /v1/override</text>
+<text x="528" y="846" fill="#a5aca7" font-size="16.5" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">GET  /v1/flags</text>
+<text x="528" y="874" fill="#838a85" font-size="16">signed configs, ETag cached 5 to 15 min, 5 percent cohorts</text>
+
+<text x="34" y="938" fill="#6faa85" font-size="16" font-weight="700" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">03</text>
+<text x="68" y="938" fill="#c8cec9" font-size="17" font-weight="700" letter-spacing="2.2">SERVER</text>
+<text x="184" y="938" fill="#757c77" font-size="18">append only event store, and the loop that re-weights the constitution</text>
+<line x1="34" y1="952" x2="946" y2="952" stroke="#222c25" stroke-width="1"/>
+
+<rect x="34" y="968" width="440" height="70" fill="url(#lpanel)" stroke="#47514a" stroke-width="1.5"/>
+<text x="56" y="996" fill="#ecefed" font-size="19" font-weight="700">gRPC Ingest Gateway</text>
+<text x="56" y="1022" fill="#a5aca7" font-size="16.5">mTLS, rate limited per drone</text>
+
+<rect x="506" y="968" width="440" height="70" fill="url(#lpanel)" stroke="#47514a" stroke-width="1.5"/>
+<text x="528" y="996" fill="#ecefed" font-size="19" font-weight="700">Stream Processor</text>
+<text x="528" y="1022" fill="#a5aca7" font-size="16.5">windowed enrich into event store and time series</text>
+
+<rect x="34" y="1052" width="440" height="70" fill="url(#lpanel)" stroke="#47514a" stroke-width="1.5"/>
+<text x="56" y="1080" fill="#ecefed" font-size="19" font-weight="700">Analytics and Evals</text>
+<text x="56" y="1106" fill="#a5aca7" font-size="16.5">p50 and p95 latency, intervention rate, drift</text>
+
+<rect x="506" y="1052" width="440" height="70" fill="url(#lpanelLive)" stroke="url(#lchrome)" stroke-width="2.2"/>
+<text x="528" y="1080" fill="#ffffff" font-size="19" font-weight="700">Weight Learner</text>
+<text x="528" y="1106" fill="#ccd2ce" font-size="16.5">re-weights the constitution on long horizon outcomes</text>
+
+<rect x="34" y="1136" width="440" height="70" fill="url(#lpanel)" stroke="#47514a" stroke-width="1.5"/>
+<text x="56" y="1164" fill="#ecefed" font-size="19" font-weight="700">Config and Weights API</text>
+<text x="56" y="1190" fill="#a5aca7" font-size="16.5">serves weights.json, canary rollout, auto rollback</text>
+
+<rect x="506" y="1136" width="440" height="70" fill="url(#lpanel)" stroke="#47514a" stroke-width="1.5"/>
+<text x="528" y="1164" fill="#ecefed" font-size="19" font-weight="700">Monitoring and Alerts</text>
+<text x="528" y="1190" fill="#a5aca7" font-size="16.5">SLOs, pager on error budget burn</text>
+
+<line x1="34" y1="1240" x2="946" y2="1240" stroke="#222c25" stroke-width="1"/>
+<text x="34" y="1272" fill="#838a85" font-size="17">Degrade path: repeated agent crashes quarantine the policy down to a simpler heuristic; a dead config</text>
+<text x="34" y="1294" fill="#838a85" font-size="17">service holds the last weights until TTL, then falls back to the safest default.</text>
+</svg>

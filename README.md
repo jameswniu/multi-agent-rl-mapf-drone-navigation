@@ -283,6 +283,48 @@ Worth reading before the deployment sections. The repository name is older than 
 
 The multi-agent and MAPF pieces are the roadmap the name points at, not a description of `src/`.
 
+### The designed system
+
+The repository carries a full low level design that `src/` has never implemented. It is worth reading as intent, and worth being explicit that it is intent: the actor pipeline, the bounded queues, the safety arbiter and the server side re-weighting loop are all design, not code.
+
+<p align="center">
+  <img src="assets/low-level-design.svg" alt="Low level design: an on-drone actor pipeline from ingestion through preprocess and policy into a safety controller, with bounded queues between stages, gRPC and REST interfaces, and a server side of ingest gateway, stream processor, analytics, weight learner and config API, under a 25 millisecond tick budget." width="100%">
+</p>
+
+<details>
+<summary>Same diagram as text</summary>
+
+```text
+  ON DRONE                                            budget: 25 ms per tick
+    Root Supervisor        restarts, deadlines, time sync    beacon 200 ms
+         |
+    Ingestion actors       IMU, GPS, LiDAR, camera           Q1  64    5 ms
+         |                 Frame{seq, ts, payload}
+    Preprocess pipeline    calibrate, filter, fuse           Q2  64    8 ms
+         |                 Features[list[float]]
+    Policy service         candidates + alignment scorer     Q3 128    7 ms
+         |                 weighted by the constitution
+    Safety Controller      geofence, separation, altitude,             5 ms
+         |                 return to home. Final arbiter.
+    Black Box              ring buffer, last N minutes
+
+  INTERFACES
+    gRPC, data plane       AppendEvents / HealthBeat / Decide
+                           mTLS, deadlines 50 to 100 ms
+    REST, control plane    GET /v1/constitution, POST /v1/override,
+                           GET /v1/flags. Signed, ETag cached.
+
+  SERVER
+    Ingest Gateway  ->  Stream Processor  ->  Event Store + time series
+                                          ->  Analytics and Evals
+                                          ->  Weight Learner
+                                          ->  Config and Weights API
+```
+
+</details>
+
+Full written spec in [`architecture/low_level_design.txt`](architecture/low_level_design.txt).
+
 ### Known gaps
 
 **`/predict` currently rejects every input.** The request schema declares `state: dict`, while `PPOAgent.predict` calls `torch.tensor(state)` and needs a numeric sequence. No body satisfies both:
