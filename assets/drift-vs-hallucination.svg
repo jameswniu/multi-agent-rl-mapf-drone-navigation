@@ -5,15 +5,15 @@
     <stop offset="1" stop-color="#05080c"/>
   </linearGradient>
   <pattern id="dgrid" width="26" height="26" patternUnits="userSpaceOnUse">
-    <circle cx="1" cy="1" r="0.7" fill="#16202c"/>
+    <circle cx="1" cy="1" r="0.7" fill="#131b25"/>
   </pattern>
   <linearGradient id="dpanel" x1="0" y1="0" x2="0" y2="1">
     <stop offset="0" stop-color="#1b2431"/>
     <stop offset="1" stop-color="#111820"/>
   </linearGradient>
   <linearGradient id="band" x1="0" y1="0" x2="1" y2="0">
-    <stop offset="0" stop-color="#7fd4ff" stop-opacity="0.16"/>
-    <stop offset="1" stop-color="#7fd4ff" stop-opacity="0.05"/>
+    <stop offset="0" stop-color="#8ab0cf" stop-opacity="0.16"/>
+    <stop offset="1" stop-color="#8ab0cf" stop-opacity="0.05"/>
   </linearGradient>
   <linearGradient id="dchrome" x1="0" y1="0" x2="1" y2="0">
     <stop offset="0" stop-color="#5d6b7d"/>
@@ -23,17 +23,17 @@
   </linearGradient>
 </defs>
 
-<rect x="0" y="0" width="980" height="470" rx="14" fill="url(#dbg)"/>
-<rect x="0" y="0" width="980" height="470" rx="14" fill="url(#dgrid)"/>
+<rect x="0" y="0" width="980" height="470" fill="url(#dbg)"/>
+<rect x="0" y="0" width="980" height="470" fill="url(#dgrid)"/>
 
-<text x="34" y="46" fill="#7fd4ff" font-size="15" font-weight="700" letter-spacing="3.4" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">TWO FAILURES, TWO RESPONSES</text>
+<text x="34" y="46" fill="#8ab0cf" font-size="15" font-weight="700" letter-spacing="3.4" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">TWO FAILURES, TWO RESPONSES</text>
 <text x="34" y="84" fill="#f4f8fc" font-size="30" font-weight="700">Drift is not hallucination</text>
 
-<rect x="34" y="110" width="440" height="252" rx="6" fill="url(#dpanel)" stroke="#3a4859" stroke-width="1.5"/>
+<rect x="34" y="110" width="440" height="252" fill="url(#dpanel)" stroke="#3a4859" stroke-width="1.5"/>
 <text x="58" y="150" fill="#eef4fa" font-size="22" font-weight="700">DRIFT</text>
 <text x="132" y="150" fill="#8ea0b5" font-size="18">a bound was crossed</text>
 
-<rect x="58" y="196" width="216" height="36" rx="4" fill="url(#band)" stroke="#7fd4ff" stroke-width="1.2" stroke-dasharray="4 3"/>
+<rect x="58" y="196" width="216" height="36" fill="url(#band)" stroke="#8ab0cf" stroke-width="1.2" stroke-dasharray="4 3"/>
 <line x1="58" y1="252" x2="450" y2="252" stroke="#3a4859" stroke-width="1.6"/>
 <line x1="58" y1="246" x2="58" y2="258" stroke="#8fa3ba" stroke-width="1.6"/>
 <line x1="274" y1="246" x2="274" y2="258" stroke="#8fa3ba" stroke-width="1.6"/>
@@ -48,26 +48,26 @@
 <text x="58" y="316" fill="#ccd9e7" font-size="18">The right kind of value, in the wrong place.</text>
 <text x="58" y="342" fill="#8ea0b5" font-size="17">Widen the bound, retrain, or investigate.</text>
 
-<rect x="506" y="110" width="440" height="252" rx="6" fill="url(#dpanel)" stroke="url(#dchrome)" stroke-width="2"/>
+<rect x="506" y="110" width="440" height="252" fill="url(#dpanel)" stroke="url(#dchrome)" stroke-width="2"/>
 <text x="530" y="150" fill="#ffffff" font-size="22" font-weight="700">HALLUCINATION</text>
 <text x="746" y="150" fill="#a9bbcd" font-size="18">a value was invented</text>
 
 <g>
-  <rect x="530" y="204" width="46" height="46" rx="5" fill="#16202c" stroke="#3a4859" stroke-width="1.4"/>
+  <rect x="530" y="204" width="46" height="46" fill="#16202c" stroke="#3a4859" stroke-width="1.4"/>
   <text x="553" y="234" fill="#9fb0c3" font-size="18" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">0</text>
-  <rect x="584" y="204" width="46" height="46" rx="5" fill="#16202c" stroke="#3a4859" stroke-width="1.4"/>
+  <rect x="584" y="204" width="46" height="46" fill="#16202c" stroke="#3a4859" stroke-width="1.4"/>
   <text x="607" y="234" fill="#9fb0c3" font-size="18" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">1</text>
-  <rect x="638" y="204" width="46" height="46" rx="5" fill="#16202c" stroke="#3a4859" stroke-width="1.4"/>
+  <rect x="638" y="204" width="46" height="46" fill="#16202c" stroke="#3a4859" stroke-width="1.4"/>
   <text x="661" y="234" fill="#9fb0c3" font-size="18" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">2</text>
-  <rect x="692" y="204" width="46" height="46" rx="5" fill="#16202c" stroke="#3a4859" stroke-width="1.4"/>
+  <rect x="692" y="204" width="46" height="46" fill="#16202c" stroke="#3a4859" stroke-width="1.4"/>
   <text x="715" y="234" fill="#9fb0c3" font-size="18" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">3</text>
-  <rect x="746" y="204" width="46" height="46" rx="5" fill="#16202c" stroke="#3a4859" stroke-width="1.4"/>
+  <rect x="746" y="204" width="46" height="46" fill="#16202c" stroke="#3a4859" stroke-width="1.4"/>
   <text x="769" y="234" fill="#9fb0c3" font-size="18" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">4</text>
 </g>
 <text x="530" y="278" fill="#8ea0b5" font-size="16" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">Discrete(5), the whole space</text>
 
 <line x1="812" y1="196" x2="812" y2="258" stroke="#42566b" stroke-width="1.4" stroke-dasharray="5 4"/>
-<rect x="838" y="204" width="82" height="46" rx="5" fill="#26323f" stroke="#eaf2fa" stroke-width="2"/>
+<rect x="838" y="204" width="82" height="46" fill="#26323f" stroke="#eaf2fa" stroke-width="2"/>
 <text x="879" y="234" fill="#ffffff" font-size="18" text-anchor="middle" font-weight="700" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">999</text>
 
 <text x="530" y="316" fill="#ccd9e7" font-size="18">Never a member of the space at all.</text>
