@@ -34,6 +34,8 @@ which separates <em>drift</em>, a number sliding out of its declared range, from
 
 A policy network fails quietly. It returns a number of the right type, in the right shape, at the right time, and that number is wrong. Nothing raises. A type checker sees a `float`. The training loop keeps going and the loss curve still looks reasonable.
 
+Reinforcement learning makes this worse than usual, because the two obvious signals both lie. Reward is delayed, so a policy can be wrong for a hundred steps before the return reflects it. And a bounded action space means an invalid decision often gets clamped into a valid one on its way to the actuator, which is exactly the case where a real drone flies and a real log stays empty.
+
 So this repo attaches a validator to both sides of the loop and makes every step answer two separate questions:
 
 | | question | example | means |
@@ -43,9 +45,41 @@ So this repo attaches a validator to both sides of the loop and makes every step
 
 The distinction earns its keep because the two need different responses. Drift means a bound is wrong or a distribution is moving, so you widen, retrain, or investigate. Hallucination means the output space itself was violated, so you stop.
 
-`IntegrityStats` tallies both across a run and prints a report at the end of training and of inference, so a run that completed is not automatically a run that was clean.
-
 **This is not a theoretical feature.** Getting CI green on this repo surfaced a bug the validators had been reporting correctly the whole time while nobody was reading them. `observation_space` declared a single scalar upper bound of `grid_size` across all five dimensions, but the fifth dimension counts down from `max_steps`. Under the shipped config that is 200 against a bound of 20, so **every step of every episode raised an observation drift error**. The validator was right. The declared space was wrong.
+
+---
+
+## The integrity layer
+
+Two validators in [`src/integrity_validators.py`](src/integrity_validators.py), one per side of the loop, plus a counter in [`src/integrity_stats.py`](src/integrity_stats.py).
+
+**`IntegrityValidator`**, attached to `DroneEnv`, runs inside `step()` and appends findings to the returned `info` dict under `integrity_errors`:
+
+| check | classified as | note |
+|---|---|---|
+| `observation_space.contains(obs)` | drift | Observation is cast to the space dtype first, to avoid float32 against float64 false positives |
+| Observation fails to cast at all | drift | Reported as a malformed observation rather than an out-of-range one |
+| `action_space.contains(int(action))` | hallucination | |
+| `np.isfinite(reward)` | drift | Catches `NaN` and `inf` rewards |
+
+**`PolicyIntegrityValidator`**, attached to `PPOAgent`, runs on every `select_action` and `predict`:
+
+| check | classified as | tolerance |
+|---|---|---|
+| Any action probability below zero | drift | strict |
+| Probabilities sum to 1 | drift | `atol` of `1e-2`, tightening to `1e-5` when constructed with `strict=True` |
+| Value estimate is finite | drift | catches a diverged critic |
+| Chosen action index is inside the action space | hallucination | |
+
+**`IntegrityStats`** tallies both streams and prints a rate rather than a raw count, because a count is meaningless without a denominator:
+
+```
+[Training Integrity Report] Steps=2000
+  - Drift errors: 0 (0.00% of steps)
+  - Hallucination errors: 0 (0.00% of steps)
+```
+
+The validators report and continue; they do not halt a run. That is a deliberate choice for a training loop and the wrong one for a flight controller, which is what the Safety Controller in the roadmap is for.
 
 ---
 
@@ -124,18 +158,92 @@ A grid world, deliberately small, so the validator layer is the thing under test
 
 Bounds are per-dimension, for the reason described above. One scalar bound cannot describe both a coordinate and a step counter.
 
-**Action**, `Discrete(5)`: `0` hover, `1` up, `2` down, `3` left, `4` right. Moves clamp at the grid edge, so an illegal move is absorbed rather than rejected.
+**Action**, `Discrete(5)`:
 
-**Reward**: `+10.0` on reaching the goal, `-1.0` per step otherwise. `terminated` on goal, `truncated` at `max_steps`.
+| index | action | effect |
+|---|---|---|
+| `0` | hover | position unchanged |
+| `1` | up | `y + 1`, clamped at `grid_size - 1` |
+| `2` | down | `y - 1`, clamped at `0` |
+| `3` | left | `x - 1`, clamped at `0` |
+| `4` | right | `x + 1`, clamped at `grid_size - 1` |
 
-**Config** ([`configs/env.yaml`](configs/env.yaml)):
+Moves clamp at the grid edge, so an illegal move is absorbed rather than rejected. `action_map` carries the human-readable names.
+
+**Reward**: `+10.0` on reaching the goal, `-1.0` per step otherwise. `terminated` on goal, `truncated` at `max_steps`. The agent starts at the origin and the goal sits at the far corner, so the shortest path under this config is 38 moves.
+
+---
+
+## The PPO agent
+
+An actor-critic with a shared trunk, in [`src/agents/ppo_agent.py`](src/agents/ppo_agent.py). Small on purpose: the point of the repo is the validation layer around it.
+
+```
+observation (5)
+      |
+   Linear(5, 64) + ReLU          shared trunk
+      |
+      +---- Linear(64, 5) + Softmax    policy head, action distribution
+      |
+      +---- Linear(64, 1)              value head, state baseline
+```
+
+The update is standard clipped-surrogate PPO:
+
+| term | value | role |
+|---|---|---|
+| Policy loss | `-min(r * A, clip(r, 1 - eps, 1 + eps) * A)` | the clip stops a single batch from moving the policy too far |
+| Value loss | `0.5 * MSE(return, value)` | trains the baseline |
+| Entropy bonus | `-0.01 * entropy` | keeps the distribution from collapsing early |
+
+Returns are discounted, then normalized. Advantages are normalized again after subtracting the baseline. Both use an `1e-8` epsilon in the denominator.
+
+**Hyperparameters** are currently Python defaults on `PPOAgent.__init__`, not configuration. See Known gaps.
+
+| parameter | value |
+|---|---|
+| `lr` | `3e-4`, Adam |
+| `gamma` | `0.99` |
+| `eps_clip` | `0.2` |
+| `epochs` | `3` update passes per episode |
+
+`select_action` samples from the distribution for exploration during training. `predict` takes the argmax for inference. Both run the policy validator before returning.
+
+---
+
+## Configuration
+
+Only one config file is actually read by the code today.
+
+| file | read by | status |
+|---|---|---|
+| [`configs/env.yaml`](configs/env.yaml) | `DroneEnv._load_config` | **Live** |
+| [`configs/train.yaml`](configs/train.yaml) | nothing | **Dead**. Referenced only by the broken `scripts/train.sh` |
+| [`configs/env-prod.yaml`](configs/env-prod.yaml) | nothing | **Dead** |
+| `.env` (see [`.env.example`](.env.example)) | `scripts/run_server.sh` only | Shell-level. No Python module reads an environment variable |
 
 ```yaml
+# configs/env.yaml, the one that is loaded
 grid_size: 20
-num_drones: 10
-obstacle_density: 0.1
+num_drones: 10          # read into an attribute, never used
+obstacle_density: 0.1   # read into an attribute, never used
 max_steps: 200
 ```
+
+`DroneEnv` resolves a relative config path against the repository root, so it works the same from the repo root, from `src/`, and inside the container. If PyYAML is missing it falls back to a minimal line parser rather than failing.
+
+---
+
+## Request lifecycle
+
+What happens on a call to the service, from [`src/api/app.py`](src/api/app.py):
+
+1. `add_metrics` middleware stamps a start time.
+2. The route runs. `/predict` hands the payload to `PPOAgent.predict`; failures are wrapped as `APIError` and rendered as `{"error": "..."}` with status 500.
+3. The middleware records `REQUEST_COUNT` and `REQUEST_LATENCY`, both labelled by method and endpoint, then logs a line like `POST /predict completed in 0.032s`.
+4. Prometheus scrapes `GET /metrics`; the orchestrator polls `GET /healthz`.
+
+Weights load once at startup from `models/ppo_drone.pt`. If that file is absent the service logs a warning and serves an untrained policy rather than refusing to start, which is the right call for a probe endpoint and the wrong one for a prediction endpoint.
 
 ---
 
@@ -151,6 +259,7 @@ Worth reading before the deployment sections. The repository name is older than 
 | FastAPI service, `/metrics` and `/healthz` | **Implemented** |
 | Docker image, Compose, Kubernetes manifests, Prometheus and Grafana config | **Implemented** as configuration |
 | `/predict` end to end | **Broken**, see Known gaps |
+| Hyperparameters from `configs/train.yaml` | **Not wired**, defaults live in Python |
 | Multi-agent, more than one drone | **Not implemented**. `num_drones` is read into an attribute and never used; the env tracks a single position vector |
 | MAPF, multi-agent path finding | **Not implemented**. No conflict resolution, no reservation table, no joint planner |
 | Obstacles | **Not implemented**. `obstacle_density` is read and never used |
@@ -167,7 +276,22 @@ The multi-agent and MAPF pieces are the roadmap the name points at, not a descri
 {"state": {"x": 1, "y": 2}}  ->  500  "Prediction failed: must be real number, not dict"
 ```
 
-`tests/test_api.py` does not catch this, because it replaces `PPOAgent` with a stub that returns a constant. The fix is to agree on one contract, most naturally the 5-number observation vector, then make the schema and the agent match.
+`tests/test_api.py` does not catch this, because it replaces `PPOAgent` with a stub that returns a constant. The fix is to agree on one contract, most naturally the 5-number observation vector, then make the schema and the agent match. Note that `predict` returns an integer index, while `src/request_response_flow.MD` documents a response of `{"action": "move_up"}`; the same fix should decide whether the API speaks indices or names.
+
+**`scripts/train.sh` does not run.** It invokes `python src/main.py --config configs/train.yaml`, but `main.py` has no argument parsing and the `src/` layout needs the editable install. Use `python -m main`.
+
+**`tests/conftest.py` swallows import errors.** It catches any failure importing the real `DroneEnv` and substitutes a stub. That is why a missing dependency once surfaced as `AttributeError: 'DroneEnv' object has no attribute 'reset'` rather than an import error, and why coverage sat at 38 percent while appearing to exercise the environment.
+
+### Roadmap
+
+Roughly in dependency order:
+
+1. Fix the `/predict` contract, and cover it with a test that does not stub the agent.
+2. Wire `configs/train.yaml` into `PPOAgent` so hyperparameters stop being Python defaults.
+3. Obstacles, using the `obstacle_density` field that already exists in config.
+4. Multiple drones: a per-drone observation and action, and a reward that prices collisions.
+5. MAPF proper: conflict detection between planned paths, then a resolution strategy.
+6. Safety Controller, the first component allowed to veto rather than only report.
 
 ---
 
@@ -207,7 +331,7 @@ Total reward over 5 steps = -5.00
   - Hallucination errors: 0 (0.00% of steps)
 ```
 
-Those two zeroes are the whole point of the section above. Before the observation-space bounds were fixed, that same run reported a drift error on all 2000 of 2000 steps. Ten episodes on a 20x20 grid is far too short to reach the goal, which is why every episode returns the `-200.00` floor; the run demonstrates the validator layer, not convergence.
+Those two zeroes are the whole point of the section above. Before the observation-space bounds were fixed, that same run reported a drift error on all 2000 of 2000 steps. Ten episodes on a 20x20 grid is far too short to reach a goal 38 moves away, which is why every episode returns the `-200.00` floor; the run demonstrates the validator layer, not convergence.
 
 Serve the API:
 
@@ -232,9 +356,7 @@ curl http://localhost:8000/healthz
 | `GET` | `/metrics` | Prometheus exposition format | Working |
 | `GET` | `/healthz` | Liveness and readiness probe | Working |
 
-Weights load at startup from `models/ppo_drone.pt`. If that file is absent the service logs a warning and serves an untrained policy rather than refusing to start, which is the right call for a probe endpoint and the wrong one for a prediction endpoint.
-
-Every request passes through middleware recording `REQUEST_COUNT` and `REQUEST_LATENCY` by method and endpoint. Notes in [`docs/API.md`](docs/API.md).
+Notes in [`docs/API.md`](docs/API.md).
 
 ---
 
@@ -255,7 +377,19 @@ pytest --cov=src --cov-report=term-missing
 
 Current state on `main`: 6 passing, 85 percent line coverage.
 
-**One caveat worth knowing.** `tests/conftest.py` catches any import failure of the real `DroneEnv` and substitutes a stub. That is why a missing dependency once surfaced as `AttributeError: 'DroneEnv' object has no attribute 'reset'` instead of an import error, and why coverage sat at 38 percent while appearing to exercise the environment. The stub is still in place.
+---
+
+## Continuous integration
+
+Three workflows, all on push and pull request against `main`.
+
+| workflow | what it does |
+|---|---|
+| [`test.yml`](.github/workflows/test.yml) | Python 3.10, installs requirements and the package editable, runs `pytest -v` |
+| [`docker.yml`](.github/workflows/docker.yml) | Builds `docker/Dockerfile`, then runs the suite inside the image |
+| [`codeql-analysis.yml`](.github/workflows/codeql-analysis.yml) | CodeQL static analysis for Python |
+
+`_ci-cd.yml` is a manual `workflow_dispatch` duplicate of `test.yml`. The Docker job matters because it catches packaging problems the plain test job cannot: it is the job that proves the image can import the `src/` layout at all.
 
 ---
 
@@ -288,6 +422,14 @@ kubectl apply -f docker/k8s/
 
 Panels cover request latency p95, requests by endpoint, training reward distribution and error rate.
 
+[`src/utils/metrics.py`](src/utils/metrics.py) declares three collectors, but only two are ever written:
+
+| collector | emitted |
+|---|---|
+| `api_requests_total` | Yes, by the middleware on every request |
+| `api_request_latency_seconds` | Yes, by the middleware on every request |
+| `training_reward` | **No.** Declared and never observed, so the training reward panel has no series behind it. The training loop prints episode reward to stdout instead |
+
 ---
 
 ## Repository layout
@@ -295,7 +437,7 @@ Panels cover request latency p95, requests by endpoint, training reward distribu
 ```
 multi-agent-rl-mapf-drone-navigation/
 ├── architecture/        # Design diagrams, low level specs, interview summary
-├── configs/             # env.yaml, env-prod.yaml, train.yaml
+├── configs/             # env.yaml (live), train.yaml and env-prod.yaml (not yet wired)
 ├── docker/              # Dockerfile, Dockerfile.prod, compose, k8s manifests
 ├── docs/                # API, ARCHITECTURE, DEPLOYMENT
 ├── monitoring/          # Prometheus, Grafana, Alertmanager
