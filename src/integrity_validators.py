@@ -32,6 +32,18 @@ class IntegrityValidator:
         self.action_space = action_space
         self.observation_space = observation_space
 
+    def _as_action(self, action):
+        """Shape an action the way its space expects it.
+
+        A MultiDiscrete space holds one move per drone and wants an integer
+        vector; a Discrete space wants a single integer. Casting a vector with
+        ``int()`` raises, which previously made every legal multi-drone action
+        look like a hallucination.
+        """
+        if hasattr(self.action_space, "nvec"):
+            return np.asarray(action, dtype=np.int64).reshape(self.action_space.nvec.shape)
+        return int(action)
+
     def validate(self, obs, action, reward):
         errors = []
 
@@ -46,8 +58,7 @@ class IntegrityValidator:
 
         # Action hallucination check
         try:
-            action = int(action)  # cast for discrete space
-            if not self.action_space.contains(action):
+            if not self.action_space.contains(self._as_action(action)):
                 errors.append({"type": "hallucination", "field": "action", "msg": "invalid action"})
         except Exception:
             errors.append({"type": "hallucination", "field": "action", "msg": "invalid action"})
@@ -74,6 +85,12 @@ class PolicyIntegrityValidator:
         self.action_space = action_space
         self.strict = strict  # strict=True -> tighter tolerance for prob sums
 
+    def _as_action(self, action):
+        """Match the action to the shape its space declares. See IntegrityValidator."""
+        if hasattr(self.action_space, "nvec"):
+            return np.asarray(action, dtype=np.int64).reshape(self.action_space.nvec.shape)
+        return int(action)
+
     def validate(self, action_probs, value, action):
         errors = []
 
@@ -81,9 +98,12 @@ class PolicyIntegrityValidator:
         if (action_probs < 0).any():
             errors.append({"type": "drift", "field": "probs", "msg": "negative action probability"})
 
-        # Check that probs sum to ~1
+        # Check that probs sum to ~1. With one row per drone, every row is its
+        # own distribution and each must sum to 1 independently; summing the
+        # whole tensor would total the number of drones and hide a broken row.
         sum_tol = 1e-2 if not self.strict else 1e-5
-        if not torch.isclose(action_probs.sum(), torch.tensor(1.0), atol=sum_tol):
+        totals = action_probs.sum(dim=-1) if action_probs.dim() > 1 else action_probs.sum()
+        if not torch.isclose(totals, torch.ones_like(totals), atol=sum_tol).all():
             errors.append({"type": "drift", "field": "probs", "msg": "action probabilities do not sum to 1"})
 
         # Value sanity
@@ -92,8 +112,7 @@ class PolicyIntegrityValidator:
 
         # Action hallucination check
         try:
-            action = int(action)
-            if not self.action_space.contains(action):
+            if not self.action_space.contains(self._as_action(action)):
                 errors.append({"type": "hallucination", "field": "action", "msg": "invalid action index"})
         except Exception:
             errors.append({"type": "hallucination", "field": "action", "msg": "invalid action index"})

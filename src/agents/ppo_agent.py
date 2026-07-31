@@ -80,8 +80,12 @@ class PPOAgent:
         self.eps_clip = eps_clip # PPO clipping parameter
         self.epochs = epochs     # policy update iterations
 
-        obs_dim = env.observation_space.shape[0]  # 5 features
-        act_dim = env.action_space.n              # 5 actions
+        # One row of features per drone, and the same move set for each. The
+        # policy weights are shared across drones: a single trunk is applied to
+        # every row, so the network size does not grow with the fleet and a
+        # lesson learned by one drone is available to all of them.
+        obs_dim = int(env.observation_space.shape[-1])
+        act_dim = int(env.action_space.nvec[0]) if hasattr(env.action_space, "nvec") else int(env.action_space.n)
 
         # Initialize policy network and optimizer
         self.policy = PPOPolicy(obs_dim, act_dim)
@@ -95,18 +99,20 @@ class PPOAgent:
         Pick an action from the current policy.
         -> During training, we sample from the distribution (exploration).
         """
-        state = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
+        state = torch.tensor(np.asarray(state), dtype=torch.float32)
         probs, value = self.policy(state)
         m = Categorical(probs)
         action = m.sample()
 
-        # Integrity check
-        errors = self.validator.validate(probs.squeeze(), value.squeeze(), action.item())
+        # Integrity check. One log probability per drone, summed, because the
+        # fleet's move is the joint event and PPO's ratio is over that.
+        actions = action.detach().numpy()
+        errors = self.validator.validate(probs, value.mean(), actions)
         if errors:
             for e in errors:
                 print(f"[Integrity Warning] {e['type']} on {e['field']}: {e['msg']}")
 
-        return action.item(), m.log_prob(action)
+        return actions, m.log_prob(action).sum()
 
     def train(self, num_episodes=100):
         """
@@ -148,17 +154,22 @@ class PPOAgent:
             # Policy update for several epochs
             for _ in range(self.epochs):
                 states_t = torch.tensor(np.array(states), dtype=torch.float32)
-                actions_t = torch.tensor(actions, dtype=torch.long)
+                actions_t = torch.tensor(np.array(actions), dtype=torch.long)
                 old_log_probs = torch.stack(log_probs)
 
                 # Forward pass
                 probs, values = self.policy(states_t)
                 m = Categorical(probs)
-                new_log_probs = m.log_prob(actions_t)
+                # Sum across drones so each timestep has one joint log probability.
+                new_log_probs = m.log_prob(actions_t).sum(dim=-1)
                 entropy = m.entropy().mean()  # encourages exploration
 
+                # One scalar baseline per timestep: the fleet's reward is a team
+                # total, so the critic is averaged over drones to match it.
+                state_values = values.squeeze(-1).mean(dim=-1)
+
                 # Advantage = return - baseline
-                advantages = discounted - values.squeeze()
+                advantages = discounted - state_values
                 advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
                 # PPO surrogate loss
@@ -167,7 +178,7 @@ class PPOAgent:
                 surr2 = torch.clamp(ratio, 1 - self.eps_clip, 1 + self.eps_clip) * advantages
 
                 # Value loss (MSE)
-                value_loss = (discounted - values.squeeze()) ** 2
+                value_loss = (discounted - state_values) ** 2
 
                 # Total loss = policy + value - entropy
                 loss = -torch.min(surr1, surr2).mean() \
@@ -194,12 +205,12 @@ class PPOAgent:
         Greedy action selection (for inference).
         -> Use after training when running in production.
         """
-        state = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
+        state = torch.tensor(np.asarray(state), dtype=torch.float32)
         probs, value = self.policy(state)
-        action = torch.argmax(probs, dim=-1).item()
+        action = torch.argmax(probs, dim=-1).detach().numpy()
 
         # Integrity check
-        errors = self.validator.validate(probs.squeeze(), value.squeeze(), action)
+        errors = self.validator.validate(probs, value.mean(), action)
         if errors:
             for e in errors:
                 print(f"[Integrity Warning] {e['type']} on {e['field']}: {e['msg']}")

@@ -31,13 +31,14 @@ from src.agents.ppo_agent import PPOAgent
 class StateInput(BaseModel):
     """Schema for the prediction request body.
 
-    ``state`` is one environment observation, flat and in the order the
-    environment emits it: ``[x, y, goal_x, goal_y, steps_remaining]``. It is a
-    list of numbers rather than a mapping because that is what the policy
-    consumes; ``PPOAgent.predict`` builds a tensor straight from it.
+    ``state`` is one environment observation: a row per drone, each row being
+    ``[x, y, goal_x, goal_y, steps_remaining, blocked_up, blocked_down,
+    blocked_left, blocked_right]``. It is a list of rows rather than a mapping
+    because that is what the policy consumes; ``PPOAgent.predict`` builds a
+    tensor straight from it.
     """
 
-    state: List[float]
+    state: List[List[float]]
 
 
 # -------------------------------------------------
@@ -95,21 +96,27 @@ def predict(payload: StateInput):
     """
     Accepts a payload matching :class:`StateInput` and returns the agent's action.
 
-    Example request:  { "state": [0, 0, 19, 19, 200] }
-    Example response: { "action": 4, "action_name": "right" }
+    Example request:  { "state": [[0, 0, 19, 19, 200, 1, 1, 1, 0]] }
+    Example response: { "actions": [4], "action_names": ["right"] }
 
-    The action is returned both ways on purpose. The index is what the
-    environment's ``step()`` accepts; the name is what a human reads in a log.
+    Actions are returned both ways on purpose. The indices are what the
+    environment's ``step()`` accepts; the names are what a human reads in a log.
     """
     logger.info("Received predict request")
 
-    expected = int(env.observation_space.shape[0])
-    if len(payload.state) != expected:
-        # A wrong-length observation is a client error, not a server fault, so
-        # it is rejected before it can reach the policy as an opaque failure.
+    rows, cols = env.observation_space.shape
+    # A malformed observation is a client error, not a server fault, so it is
+    # rejected before it can reach the policy as an opaque tensor failure.
+    if len(payload.state) != rows:
         raise HTTPException(
             status_code=422,
-            detail=f"state must have exactly {expected} values, got {len(payload.state)}",
+            detail=f"state must have exactly {rows} rows, one per drone, got {len(payload.state)}",
+        )
+    bad = [i for i, row in enumerate(payload.state) if len(row) != cols]
+    if bad:
+        raise HTTPException(
+            status_code=422,
+            detail=f"each row must have exactly {cols} values; row {bad[0]} has {len(payload.state[bad[0]])}",
         )
 
     try:
@@ -117,7 +124,8 @@ def predict(payload: StateInput):
     except Exception as e:
         # Wrap raw exceptions in a clean APIError
         raise APIError(f"Prediction failed: {str(e)}", status_code=500)
-    return {"action": action, "action_name": env.action_map[action]}
+    actions = [int(a) for a in action]
+    return {"actions": actions, "action_names": [env.action_map[a] for a in actions]}
 
 
 @app.get("/metrics")
