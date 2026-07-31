@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 780" width="980" height="780" role="img" aria-label="Reward shaping on two axes: self alignment against peer interaction, each either event based or continuous, giving four quadrants of which continuous on both axes is the most stable" font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif">
+<defs>
+  <linearGradient id="bg2" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#12161d"/>
+    <stop offset="1" stop-color="#0a0d12"/>
+  </linearGradient>
+  <linearGradient id="chrome2" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0" stop-color="#8d99a8"/>
+    <stop offset="0.35" stop-color="#e6edf5"/>
+    <stop offset="0.62" stop-color="#9aa6b5"/>
+    <stop offset="1" stop-color="#dfe7f0"/>
+  </linearGradient>
+  <linearGradient id="cell" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#1e242e"/>
+    <stop offset="1" stop-color="#151a22"/>
+  </linearGradient>
+  <linearGradient id="cellBest" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#28303c"/>
+    <stop offset="1" stop-color="#1b212a"/>
+  </linearGradient>
+</defs>
+
+<rect x="0" y="0" width="980" height="780" rx="12" fill="url(#bg2)"/>
+
+<text x="34" y="52" fill="#f2f6fa" font-size="27" font-weight="700">Reward shaping, two axes</text>
+<text x="34" y="79" fill="#93a1b3" font-size="15.5">A spiky reward invites goal hacking. A continuous one prices the behaviour you actually want.</text>
+<text x="946" y="52" fill="#8f9dae" font-size="14.5" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">design reference,</text>
+<text x="946" y="76" fill="#8f9dae" font-size="14.5" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">not yet implemented</text>
+
+<line x1="34" y1="102" x2="946" y2="102" stroke="#2b333f" stroke-width="1"/>
+
+<text x="118" y="136" fill="#7e8b9c" font-size="14" font-weight="700" letter-spacing="1.6">PEER INTERACTION</text>
+<text x="318" y="170" fill="#aab6c6" font-size="15.5" font-weight="700" text-anchor="middle">event based</text>
+<text x="318" y="190" fill="#6f7c8d" font-size="14" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">+Y if coop_event else 0</text>
+<text x="746" y="170" fill="#aab6c6" font-size="15.5" font-weight="700" text-anchor="middle">continuous</text>
+<text x="746" y="190" fill="#6f7c8d" font-size="14" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">g(coop_quality)</text>
+
+<text x="0" y="0" fill="#7e8b9c" font-size="14" font-weight="700" letter-spacing="1.6" text-anchor="middle" transform="translate(28,470) rotate(-90)">SELF ALIGNMENT</text>
+<text x="0" y="0" fill="#aab6c6" font-size="15.5" font-weight="700" text-anchor="middle" transform="translate(62,333) rotate(-90)">event based</text>
+<text x="0" y="0" fill="#6f7c8d" font-size="13.5" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" transform="translate(84,333) rotate(-90)">+X if goal_met else 0</text>
+<text x="0" y="0" fill="#aab6c6" font-size="15.5" font-weight="700" text-anchor="middle" transform="translate(62,613) rotate(-90)">continuous</text>
+<text x="0" y="0" fill="#6f7c8d" font-size="13.5" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" transform="translate(84,613) rotate(-90)">f(alignment_score)</text>
+
+<rect x="118" y="204" width="400" height="258" rx="9" fill="url(#cell)" stroke="#46515f" stroke-width="1.6"/>
+<text x="140" y="240" fill="#e9eff6" font-size="18" font-weight="700">Spiky on both axes</text>
+<text x="140" y="266" fill="#9dabbc" font-size="15.5">Unstable. Goal hacking is likely,</text>
+<text x="140" y="288" fill="#9dabbc" font-size="15.5">because only the spike is paid.</text>
+<line x1="140" y1="308" x2="496" y2="308" stroke="#2b333f" stroke-width="1"/>
+<text x="140" y="334" fill="#8f9dae" font-size="14" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">self  +X if goal_met else 0</text>
+<text x="140" y="356" fill="#8f9dae" font-size="14" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">peer  +Y if coop_event else 0</text>
+<text x="140" y="392" fill="#c3cedd" font-size="15">The drone ignores battery and sensor</text>
+<text x="140" y="414" fill="#c3cedd" font-size="15">health to finish the route, and yields to</text>
+<text x="140" y="436" fill="#c3cedd" font-size="15">peers only when forced at a choke point.</text>
+
+<rect x="546" y="204" width="400" height="258" rx="9" fill="url(#cell)" stroke="#46515f" stroke-width="1.6"/>
+<text x="568" y="240" fill="#e9eff6" font-size="18" font-weight="700">Spiky on self only</text>
+<text x="568" y="266" fill="#9dabbc" font-size="15.5">Cooperation looks excellent while</text>
+<text x="568" y="288" fill="#9dabbc" font-size="15.5">solo navigation quietly degrades.</text>
+<line x1="568" y1="308" x2="924" y2="308" stroke="#2b333f" stroke-width="1"/>
+<text x="568" y="334" fill="#8f9dae" font-size="14" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">self  +X if goal_met else 0</text>
+<text x="568" y="356" fill="#8f9dae" font-size="14" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">peer  g(coop_quality)</text>
+<text x="568" y="392" fill="#c3cedd" font-size="15">The drone skips its safety checks to</text>
+<text x="568" y="414" fill="#c3cedd" font-size="15">finish the mission, yet holds perfect</text>
+<text x="568" y="436" fill="#c3cedd" font-size="15">formation with its peers throughout.</text>
+
+<rect x="118" y="484" width="400" height="258" rx="9" fill="url(#cell)" stroke="#46515f" stroke-width="1.6"/>
+<text x="140" y="520" fill="#e9eff6" font-size="18" font-weight="700">Spiky on peers only</text>
+<text x="140" y="546" fill="#9dabbc" font-size="15.5">Flies itself well, but competes</text>
+<text x="140" y="568" fill="#9dabbc" font-size="15.5">whenever cooperation is not scored.</text>
+<line x1="140" y1="588" x2="496" y2="588" stroke="#2b333f" stroke-width="1"/>
+<text x="140" y="614" fill="#8f9dae" font-size="14" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">self  f(alignment_score)</text>
+<text x="140" y="636" fill="#8f9dae" font-size="14" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">peer  +Y if coop_event else 0</text>
+<text x="140" y="672" fill="#c3cedd" font-size="15">The drone flies safely and efficiently,</text>
+<text x="140" y="694" fill="#c3cedd" font-size="15">but will cut in front of a peer to reach</text>
+<text x="140" y="716" fill="#c3cedd" font-size="15">the drop zone first.</text>
+
+<rect x="546" y="484" width="400" height="258" rx="9" fill="url(#cellBest)" stroke="url(#chrome2)" stroke-width="2.6"/>
+<text x="568" y="520" fill="#ffffff" font-size="18" font-weight="700">Continuous on both axes</text>
+<text x="568" y="546" fill="#c3cedd" font-size="15.5">The stable quadrant. Every second is</text>
+<text x="568" y="568" fill="#c3cedd" font-size="15.5">priced, so there is no spike to chase.</text>
+<line x1="568" y1="588" x2="924" y2="588" stroke="#4d5867" stroke-width="1"/>
+<text x="568" y="614" fill="#aab6c6" font-size="14" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">self  f(alignment_score)</text>
+<text x="568" y="636" fill="#aab6c6" font-size="14" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">peer  g(coop_quality)</text>
+<text x="568" y="672" fill="#dfe7f0" font-size="15">The drone stays inside its safety margins</text>
+<text x="568" y="694" fill="#dfe7f0" font-size="15">and holds smooth coordination with its</text>
+<text x="568" y="716" fill="#dfe7f0" font-size="15">peers, continuously.</text>
+</svg>

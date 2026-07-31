@@ -1,87 +1,127 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 520" width="1200" height="520" font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif">
-  <defs>
-    <marker id="ar-cyan" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-      <path d="M 0 0 L 10 5 L 0 10 z" fill="#00d4ff"/>
-    </marker>
-    <marker id="ar-purple" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-      <path d="M 0 0 L 10 5 L 0 10 z" fill="#b537f2"/>
-    </marker>
-    <marker id="ar-pink" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-      <path d="M 0 0 L 10 5 L 0 10 z" fill="#ff006e"/>
-    </marker>
-    <marker id="ar-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-      <path d="M 0 0 L 10 5 L 0 10 z" fill="#39ff14"/>
-    </marker>
-    <marker id="ar-slate" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-      <path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8"/>
-    </marker>
-  </defs>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 856" width="980" height="856" role="img" aria-label="Architecture: config feeds the DroneEnv, the PPO agent closes the loop, a validator band watches both sides, and the policy is served behind FastAPI" font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif">
+<defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#12161d"/>
+    <stop offset="1" stop-color="#0a0d12"/>
+  </linearGradient>
+  <linearGradient id="chrome" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0" stop-color="#8d99a8"/>
+    <stop offset="0.35" stop-color="#e6edf5"/>
+    <stop offset="0.62" stop-color="#9aa6b5"/>
+    <stop offset="1" stop-color="#dfe7f0"/>
+  </linearGradient>
+  <linearGradient id="panel" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#1e242e"/>
+    <stop offset="1" stop-color="#151a22"/>
+  </linearGradient>
+  <linearGradient id="panelLive" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#28303c"/>
+    <stop offset="1" stop-color="#1b212a"/>
+  </linearGradient>
+  <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+    <path d="M0,0 L10,5 L0,10 z" fill="#aab6c6"/>
+  </marker>
+  <marker id="ab" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+    <path d="M0,0 L10,5 L0,10 z" fill="#e6edf5"/>
+  </marker>
+</defs>
 
-  <rect x="0" y="0" width="1200" height="520" rx="14" fill="#0a1422"/>
+<rect x="0" y="0" width="980" height="856" rx="12" fill="url(#bg)"/>
 
-  <text x="30" y="38" fill="#e2e8f0" font-size="19" font-weight="700">PPO control loop</text>
-  <text x="215" y="38" fill="#94a3b8" font-size="15">the validator layer is in pink; everything else is scaffolding around it</text>
+<text x="34" y="52" fill="#f2f6fa" font-size="27" font-weight="700" letter-spacing="0.2">Architecture</text>
+<text x="34" y="79" fill="#93a1b3" font-size="15.5">One control loop, top to bottom. The bright band is the part that watches.</text>
+<text x="946" y="52" fill="#8f9dae" font-size="14.5" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">5 obs dims / 5 actions</text>
+<text x="946" y="76" fill="#8f9dae" font-size="14.5" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">grid 20x20 / 200 steps</text>
 
-  <rect x="20" y="130" width="190" height="76" rx="9" fill="#0d1b2a" stroke="#38bdf8" stroke-width="2"/>
-  <text x="115" y="162" fill="#e2e8f0" font-size="14.5" font-weight="700" text-anchor="middle">configs/env.yaml</text>
-  <text x="115" y="184" fill="#94a3b8" font-size="12.5" text-anchor="middle">grid 20x20, 200 max steps</text>
+<line x1="34" y1="100" x2="946" y2="100" stroke="#2b333f" stroke-width="1"/>
 
-  <rect x="250" y="62" width="360" height="252" rx="12" fill="#0d1f30" stroke="#00d4ff" stroke-width="2"/>
-  <text x="270" y="88" fill="#7dd3fc" font-size="15.5" font-weight="700">DroneEnv (gymnasium)</text>
+<text x="34" y="132" fill="#7e8b9c" font-size="14" font-weight="700" letter-spacing="1.6">CONFIG</text>
+<text x="150" y="132" fill="#6f7c8d" font-size="15">the only file the code actually reads</text>
+<rect x="34" y="146" width="330" height="72" rx="8" fill="url(#panel)" stroke="#46515f" stroke-width="1.6"/>
+<text x="52" y="174" fill="#e9eff6" font-size="18" font-weight="700">configs/env.yaml</text>
+<text x="52" y="199" fill="#9dabbc" font-size="15.5">grid_size 20, max_steps 200</text>
 
-  <rect x="270" y="102" width="320" height="86" rx="8" fill="#132a3f" stroke="#00d4ff" stroke-width="1.6"/>
-  <text x="430" y="127" fill="#e2e8f0" font-size="14" font-weight="700" text-anchor="middle">reset() and step(action)</text>
-  <text x="430" y="149" fill="#94a3b8" font-size="12.5" text-anchor="middle">obs, reward, terminated,</text>
-  <text x="430" y="168" fill="#94a3b8" font-size="12.5" text-anchor="middle">truncated, info</text>
+<line x1="34" y1="244" x2="946" y2="244" stroke="#2b333f" stroke-width="1"/>
 
-  <rect x="270" y="206" width="320" height="90" rx="8" fill="#2a1220" stroke="#ff006e" stroke-width="2.4"/>
-  <text x="430" y="231" fill="#ffd7e6" font-size="14" font-weight="700" text-anchor="middle">IntegrityValidator</text>
-  <text x="430" y="253" fill="#f8b4ce" font-size="12.5" text-anchor="middle">observation inside its space?</text>
-  <text x="430" y="272" fill="#f8b4ce" font-size="12.5" text-anchor="middle">action legal? reward finite?</text>
+<text x="34" y="276" fill="#7e8b9c" font-size="14" font-weight="700" letter-spacing="1.6">ENVIRONMENT</text>
+<text x="185" y="276" fill="#6f7c8d" font-size="15">DroneEnv, a gymnasium grid world</text>
+<rect x="34" y="290" width="286" height="86" rx="8" fill="url(#panel)" stroke="#46515f" stroke-width="1.6"/>
+<text x="52" y="318" fill="#e9eff6" font-size="18" font-weight="700">reset() and step(action)</text>
+<text x="52" y="342" fill="#9dabbc" font-size="15.5">returns obs, reward,</text>
+<text x="52" y="364" fill="#9dabbc" font-size="15.5">terminated, truncated, info</text>
 
-  <rect x="700" y="62" width="470" height="252" rx="12" fill="#181f38" stroke="#b537f2" stroke-width="2"/>
-  <text x="720" y="88" fill="#d8b4fe" font-size="15.5" font-weight="700">PPOAgent (PyTorch)</text>
+<rect x="347" y="290" width="286" height="86" rx="8" fill="url(#panel)" stroke="#46515f" stroke-width="1.6"/>
+<text x="365" y="318" fill="#e9eff6" font-size="18" font-weight="700">observation, Box(5)</text>
+<text x="365" y="342" fill="#9dabbc" font-size="15.5">x, y, goal x, goal y,</text>
+<text x="365" y="364" fill="#9dabbc" font-size="15.5">steps remaining</text>
 
-  <rect x="720" y="102" width="430" height="86" rx="8" fill="#1b263b" stroke="#b537f2" stroke-width="1.6"/>
-  <text x="935" y="127" fill="#e2e8f0" font-size="14" font-weight="700" text-anchor="middle">PPOPolicy</text>
-  <text x="935" y="149" fill="#94a3b8" font-size="12.5" text-anchor="middle">shared Linear(5, 64) + ReLU</text>
-  <text x="935" y="168" fill="#94a3b8" font-size="12.5" text-anchor="middle">policy head (5), value head (1)</text>
+<rect x="660" y="290" width="286" height="86" rx="8" fill="url(#panel)" stroke="#46515f" stroke-width="1.6"/>
+<text x="678" y="318" fill="#e9eff6" font-size="18" font-weight="700">action, Discrete(5)</text>
+<text x="678" y="342" fill="#9dabbc" font-size="15.5">hover, up, down, left, right</text>
+<text x="678" y="364" fill="#9dabbc" font-size="15.5">clamped at the grid edge</text>
 
-  <rect x="720" y="206" width="430" height="90" rx="8" fill="#2a1220" stroke="#ff006e" stroke-width="2.4"/>
-  <text x="935" y="231" fill="#ffd7e6" font-size="14" font-weight="700" text-anchor="middle">PolicyIntegrityValidator</text>
-  <text x="935" y="253" fill="#f8b4ce" font-size="12.5" text-anchor="middle">probabilities sum to 1? value finite?</text>
-  <text x="935" y="272" fill="#f8b4ce" font-size="12.5" text-anchor="middle">chosen action inside the space?</text>
+<line x1="34" y1="402" x2="946" y2="402" stroke="#2b333f" stroke-width="1"/>
 
-  <path d="M 210 168 L 244 168" stroke="#38bdf8" stroke-width="2.2" fill="none" marker-end="url(#ar-cyan)"/>
+<text x="34" y="434" fill="#7e8b9c" font-size="14" font-weight="700" letter-spacing="1.6">AGENT</text>
+<text x="130" y="434" fill="#6f7c8d" font-size="15">PPOAgent, actor and critic on one trunk</text>
+<rect x="34" y="448" width="286" height="86" rx="8" fill="url(#panel)" stroke="#46515f" stroke-width="1.6"/>
+<text x="52" y="476" fill="#e9eff6" font-size="18" font-weight="700">PPOPolicy</text>
+<text x="52" y="500" fill="#9dabbc" font-size="15.5">shared Linear(5, 64) + ReLU</text>
+<text x="52" y="522" fill="#9dabbc" font-size="15.5">policy head (5), value head (1)</text>
 
-  <path d="M 610 126 L 694 126" stroke="#00d4ff" stroke-width="2.4" fill="none" marker-end="url(#ar-cyan)"/>
-  <text x="652" y="116" fill="#7dd3fc" font-size="12.5" font-weight="600" text-anchor="middle">observation</text>
+<rect x="347" y="448" width="286" height="86" rx="8" fill="url(#panel)" stroke="#46515f" stroke-width="1.6"/>
+<text x="365" y="476" fill="#e9eff6" font-size="18" font-weight="700">clipped surrogate update</text>
+<text x="365" y="500" fill="#9dabbc" font-size="15.5">eps_clip 0.2, gamma 0.99</text>
+<text x="365" y="522" fill="#9dabbc" font-size="15.5">Adam lr 3e-4, 3 epochs</text>
 
-  <path d="M 700 168 L 616 168" stroke="#b537f2" stroke-width="2.4" fill="none" marker-end="url(#ar-purple)"/>
-  <text x="658" y="158" fill="#d8b4fe" font-size="12.5" font-weight="600" text-anchor="middle">action</text>
+<rect x="660" y="448" width="286" height="86" rx="8" fill="url(#panel)" stroke="#46515f" stroke-width="1.6"/>
+<text x="678" y="476" fill="#e9eff6" font-size="18" font-weight="700">select_action / predict</text>
+<text x="678" y="500" fill="#9dabbc" font-size="15.5">sample while training,</text>
+<text x="678" y="522" fill="#9dabbc" font-size="15.5">argmax at inference</text>
 
-  <path d="M 430 296 C 430 360, 560 372, 606 400" stroke="#ff006e" stroke-width="2" fill="none" stroke-dasharray="6 5" marker-end="url(#ar-pink)"/>
-  <path d="M 935 296 C 935 360, 830 372, 784 400" stroke="#ff006e" stroke-width="2" fill="none" stroke-dasharray="6 5" marker-end="url(#ar-pink)"/>
+<path d="M 320 333 L 341 333" stroke="#aab6c6" stroke-width="1.8" fill="none" marker-end="url(#a)"/>
+<path d="M 633 333 L 654 333" stroke="#aab6c6" stroke-width="1.8" fill="none" marker-end="url(#a)"/>
+<path d="M 320 491 L 341 491" stroke="#aab6c6" stroke-width="1.8" fill="none" marker-end="url(#a)"/>
+<path d="M 633 491 L 654 491" stroke="#aab6c6" stroke-width="1.8" fill="none" marker-end="url(#a)"/>
 
-  <rect x="545" y="404" width="300" height="86" rx="9" fill="#2a1220" stroke="#ff006e" stroke-width="2.8"/>
-  <text x="695" y="431" fill="#ffd7e6" font-size="14.5" font-weight="700" text-anchor="middle">IntegrityStats</text>
-  <text x="695" y="453" fill="#f8b4ce" font-size="12.5" text-anchor="middle">drift against hallucination,</text>
-  <text x="695" y="472" fill="#f8b4ce" font-size="12.5" text-anchor="middle">reported as a rate per step</text>
 
-  <path d="M 935 314 L 935 352 L 985 352 L 985 398" stroke="#94a3b8" stroke-width="2" fill="none" marker-end="url(#ar-slate)"/>
+<line x1="34" y1="560" x2="946" y2="560" stroke="#2b333f" stroke-width="1"/>
 
-  <rect x="905" y="404" width="150" height="86" rx="9" fill="#0d1b2a" stroke="#39ff14" stroke-width="2"/>
-  <text x="980" y="431" fill="#e2e8f0" font-size="14" font-weight="700" text-anchor="middle">FastAPI</text>
-  <text x="980" y="452" fill="#94a3b8" font-size="12" text-anchor="middle">/predict /metrics</text>
-  <text x="980" y="470" fill="#94a3b8" font-size="12" text-anchor="middle">/healthz</text>
+<text x="34" y="592" fill="#e6edf5" font-size="14" font-weight="700" letter-spacing="1.6">VALIDATORS</text>
+<text x="168" y="592" fill="#aab6c6" font-size="15">every step answers both questions; this is the subject of the repository</text>
+<rect x="34" y="606" width="286" height="96" rx="8" fill="url(#panelLive)" stroke="url(#chrome)" stroke-width="2.4"/>
+<text x="52" y="634" fill="#ffffff" font-size="18" font-weight="700">IntegrityValidator</text>
+<text x="52" y="658" fill="#c3cedd" font-size="15.5">observation inside its space?</text>
+<text x="52" y="680" fill="#c3cedd" font-size="15.5">action legal? reward finite?</text>
 
-  <path d="M 1055 447 L 1084 447" stroke="#39ff14" stroke-width="2.2" fill="none" marker-end="url(#ar-green)"/>
+<rect x="347" y="606" width="286" height="96" rx="8" fill="url(#panelLive)" stroke="url(#chrome)" stroke-width="2.4"/>
+<text x="365" y="634" fill="#ffffff" font-size="18" font-weight="700">PolicyIntegrityValidator</text>
+<text x="365" y="658" fill="#c3cedd" font-size="15.5">probabilities sum to 1?</text>
+<text x="365" y="680" fill="#c3cedd" font-size="15.5">value finite? action in space?</text>
 
-  <rect x="1090" y="404" width="90" height="86" rx="9" fill="#0d1b2a" stroke="#39ff14" stroke-width="2"/>
-  <text x="1135" y="437" fill="#e2e8f0" font-size="13" font-weight="700" text-anchor="middle">Prometheus</text>
-  <text x="1135" y="458" fill="#94a3b8" font-size="12.5" text-anchor="middle">+ Grafana</text>
+<rect x="660" y="606" width="286" height="96" rx="8" fill="url(#panelLive)" stroke="url(#chrome)" stroke-width="2.4"/>
+<text x="678" y="634" fill="#ffffff" font-size="18" font-weight="700">IntegrityStats</text>
+<text x="678" y="658" fill="#c3cedd" font-size="15.5">drift against hallucination,</text>
+<text x="678" y="680" fill="#c3cedd" font-size="15.5">as a rate per step</text>
 
-  <text x="30" y="440" fill="#64748b" font-size="12.5">Validators report</text>
-  <text x="30" y="459" fill="#64748b" font-size="12.5">and continue. They</text>
-  <text x="30" y="478" fill="#64748b" font-size="12.5">never halt a run.</text>
+<path d="M 320 654 L 341 654" stroke="#e6edf5" stroke-width="2" fill="none" marker-end="url(#ab)"/>
+<path d="M 633 654 L 654 654" stroke="#e6edf5" stroke-width="2" fill="none" marker-end="url(#ab)"/>
+
+<line x1="34" y1="728" x2="946" y2="728" stroke="#2b333f" stroke-width="1"/>
+
+<text x="34" y="760" fill="#7e8b9c" font-size="14" font-weight="700" letter-spacing="1.6">SERVING</text>
+<text x="152" y="760" fill="#6f7c8d" font-size="15">weights load once at startup; validators report but never halt a run</text>
+<rect x="34" y="774" width="286" height="62" rx="8" fill="url(#panel)" stroke="#46515f" stroke-width="1.6"/>
+<text x="52" y="800" fill="#e9eff6" font-size="18" font-weight="700">FastAPI</text>
+<text x="52" y="824" fill="#9dabbc" font-size="14.5" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">/predict /metrics /healthz</text>
+
+<rect x="347" y="774" width="286" height="62" rx="8" fill="url(#panel)" stroke="#46515f" stroke-width="1.6"/>
+<text x="365" y="800" fill="#e9eff6" font-size="18" font-weight="700">Prometheus + Grafana</text>
+<text x="365" y="824" fill="#9dabbc" font-size="15.5">scrapes /metrics</text>
+
+<rect x="660" y="774" width="286" height="62" rx="8" fill="url(#panel)" stroke="#46515f" stroke-width="1.6"/>
+<text x="678" y="800" fill="#e9eff6" font-size="18" font-weight="700">models/ppo_drone.pt</text>
+<text x="678" y="824" fill="#9dabbc" font-size="15.5">loaded at startup</text>
+
+<path d="M 320 805 L 341 805" stroke="#aab6c6" stroke-width="1.8" fill="none" marker-end="url(#a)"/>
 </svg>
