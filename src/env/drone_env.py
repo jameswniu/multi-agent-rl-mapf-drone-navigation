@@ -6,8 +6,8 @@ from pathlib import Path
 from typing import Tuple, Dict, Any
 
 import numpy as np
-import gym
-from gym import spaces
+import gymnasium as gym
+from gymnasium import spaces
 
 try:  # pragma: no cover - optional dependency
     import yaml  # type: ignore
@@ -26,7 +26,7 @@ class DroneEnv(gym.Env):
         Path to the YAML configuration file. If omitted, uses ``configs/env.yaml``.
     """
 
-    metadata = {"render.modes": ["human"]}
+    metadata = {"render_modes": ["human"]}
 
     def __init__(self, config_path: str | Path = "configs/env.yaml"):
         super().__init__()
@@ -37,10 +37,21 @@ class DroneEnv(gym.Env):
         self.max_steps: int = int(self.config.get("max_steps", 100))
 
         # Observation: [x, y, goal_x, goal_y, steps_remaining]
+        # Bounds are per-dimension: the four coordinates are clamped to the grid,
+        # while steps_remaining counts down from max_steps. A single scalar bound
+        # would put every steps_remaining > grid_size outside the declared space.
         self.observation_space = spaces.Box(
-            low=0.0,
-            high=float(self.grid_size),
-            shape=(5,),
+            low=np.zeros(5, dtype=np.float32),
+            high=np.array(
+                [
+                    self.grid_size - 1,
+                    self.grid_size - 1,
+                    self.grid_size - 1,
+                    self.grid_size - 1,
+                    self.max_steps,
+                ],
+                dtype=np.float32,
+            ),
             dtype=np.float32,
         )
 

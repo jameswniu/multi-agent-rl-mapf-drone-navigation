@@ -11,5 +11,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy project code
 COPY . .
 
+# Install the project itself so the src/ layout is importable
+# (main, integrity_validators, env, agents, ...) exactly as in CI.
+RUN pip install --no-cache-dir -e .
+
 # Default command runs training
-CMD ["python", "main.py"]
+CMD ["python", "-m", "main"]
