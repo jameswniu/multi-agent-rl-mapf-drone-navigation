@@ -15,8 +15,8 @@
 <img alt="python 3.10" src="https://img.shields.io/badge/python-3.10-dfe3e0?style=flat-square&labelColor=0d1410">
 <img alt="PPO in PyTorch 2.2.2" src="https://img.shields.io/badge/PPO-PyTorch_2.2.2-8f9491?style=flat-square&labelColor=0d1410">
 <img alt="env gymnasium" src="https://img.shields.io/badge/env-gymnasium-8f9491?style=flat-square&labelColor=0d1410">
-<img alt="tests 49 passing" src="https://img.shields.io/badge/tests-49_passing-8f9491?style=flat-square&labelColor=0d1410">
-<img alt="coverage 89 percent" src="https://img.shields.io/badge/coverage-89%25-8f9491?style=flat-square&labelColor=0d1410">
+<img alt="tests 52 passing" src="https://img.shields.io/badge/tests-52_passing-8f9491?style=flat-square&labelColor=0d1410">
+<img alt="coverage 90 percent" src="https://img.shields.io/badge/coverage-90%25-8f9491?style=flat-square&labelColor=0d1410">
 <img alt="license Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-8f9491?style=flat-square&labelColor=0d1410">
 
 <br/><br/>
@@ -91,25 +91,50 @@ The validators report and continue; they do not halt a run. That is the right ca
 
 ---
 
-## What actually learns, and what does not
+## What it learns, and how that was measured
 
-Run `python -m main --demo`. It is in two parts because there are two separate claims, and only one of them scales.
+Both profiles are solved, by every seed, on the optimal route.
 
-**The agent learns the small profile.** `configs/demo.yaml` is one drone on a 5x5 grid with potential-based shaping and a fixed layout. Five seeds out of five reach roughly `+10` from roughly `-20` inside 200 episodes, against an optimum of 8 moves.
+| profile | episodes | seeds solving it | steps taken | lower bound |
+|---|---|---|---|---|
+| One drone, 5x5 | 1000 | 5 of 5 | **4** | 4 |
+| Four drones, 8x8 | 8000 | 5 of 5 | **14** | 14 |
 
-**The agent does not learn the shipped profile.** Ten drones on a 20x20 grid with random starts and goals is not solved by this implementation. Sixty episodes move it nowhere, with or without shaping. That is stated here rather than buried because the default entry point used to print a wall of flat negative rewards, which reads as a broken project regardless of what else is true.
+The lower bound is the longest single-agent shortest path, from breadth-first search on the same board. No schedule can finish before its slowest drone could fly straight there alone, so matching it means every other drone yielded at **zero cost** to it. The fleet is not merely arriving; it is coordinating without waste.
 
-Three things separate those two cases, and each was a real bug found by running rather than reading:
+Reaching that took four fixes. Each was a real defect, each was found by measuring rather than reading, and only the last one felt like machine learning.
+
+**The reward preferred partial success.** A drone standing on its goal earned a bonus on every step, while the episode ends only once every drone is home. Finishing therefore switched off the income. Measured on the four-drone profile: bringing three drones home scored `+500`, bringing all four scored `-40`. Stranding a drone was optimal, and the agent had learned that correctly. Arrival now pays once, and a completion bonus makes solving the task beat almost solving it by `+230`.
+
+**Every drone shared one advantage.** The log probabilities were summed across the fleet and the critic averaged over it, so one number per timestep was fed back to all four drones. A drone that flew a clean route and a drone that drove into a wall were told exactly the same thing, and each drone's gradient was mostly other drones' noise. Returns, baselines and advantages are now per drone. For one drone this is the same arithmetic, which is why the solo profile never showed the bug.
+
+**The action mask was generating the deadlocks.** Another drone's cell reported as impassable, in the same flags that drive the mask, so a drone literally could not choose to move toward a neighbour. Two drones facing each other each had their only useful move removed and neither could yield, and a drone parked on its goal became a permanent wall. Masking is sound only for facts that are permanent and knowable alone. Peer occupancy is now observed in its own four flags and never masked.
+
+**The policy had to learn subtraction before it could learn navigation.** The observation gave absolute position and absolute goal, so "go north" had to be rediscovered separately for every region of the board. Supplying the offset to the goal makes the policy translation invariant. Inputs are also scaled to roughly the unit interval; previously a step counter ranging to 40 sat beside flags of 0 or 1 and dominated the first layer.
+
+Measured after each fix, on five seeds, greedy evaluation at 2000 episodes:
+
+| after fixing | mean drones home | seeds solving |
+|---|---|---|
+| nothing (the exploit was live) | 0.80 of 4 | 0 of 5 |
+| the reward | 0.40 of 4 | 0 of 5 |
+| credit assignment | 1.20 of 4 | 0 of 5 |
+| the peer mask | 1.40 of 4 | 0 of 5 |
+| the representation | 1.40 of 4 | **1 of 5** |
+
+The reward fix **lowered** the score, which is the expected result and worth stating plainly: removing an exploit does not add a capability, it stops the number from being inflated by one. The earlier `0.80` was partly the agent being paid to strand a drone.
+
+The last row is also where the diagnosis changed. At 2000 episodes it looks like a marginal gain, but the same run at 8000 episodes solves on 5 of 5 seeds. The remaining gap was training length, not capability, and a sweep is what distinguished those two.
+
+**The safety machinery holds regardless.** Conflict refusal and the Safety Controller are enforced by the environment rather than learned, so they hold while the policy is choosing at random. `python -m main --demo` shows that directly: conflicting moves refused and zero drones sharing a cell, on a policy that has learned nothing.
+
+Three earlier fixes are load-bearing underneath all of this, each also found by running:
 
 | defect | effect |
 |---|---|
 | A one-step episode gives a single return, and the unbiased standard deviation of one sample is `nan` | The normalized return became `nan`, poisoning every weight permanently. About 9 percent of random layouts spawn a drone one move from its goal, so this fired often and looked like a policy that had quietly stopped learning |
 | The policy loss back-propagated through the value head | Advantages were never detached, so the critic was pulled by the actor's objective rather than only by its own regression target |
-| A sparse `+10` at the goal is almost never stumbled upon | Potential-based shaping, `F = gamma * phi(s') - phi(s)`, guides exploration. Ng, Harada and Russell (1999) show it leaves the optimal policy unchanged, so it adds guidance without redefining a good route |
-
-**The safety machinery holds regardless.** Conflict refusal and the Safety Controller are enforced by the environment, not learned, so they hold while the policy is choosing at random. Part 2 of the demo shows exactly that: conflicting moves refused, and zero drones sharing a cell, on a policy that has learned nothing.
-
-An honest reading of this repository is that the harness is finished and the learner is not.
+| A sparse goal bonus is almost never stumbled upon | Potential-based shaping, `F = gamma * phi(s') - phi(s)`, guides exploration. Ng, Harada and Russell (1999) show it leaves the optimal policy unchanged, so it adds guidance without redefining a good route |
 
 ---
 
@@ -123,22 +148,18 @@ An honest reading of this repository is that the harness is finished and the lea
   <a href="https://jameswniu.github.io/multi-agent-rl-mapf-drone-navigation/sim.html"><b>Open the viewer</b></a>
 </div>
 
-Both profiles, side by side, because the claim this repository makes is a split one. Orbit with the mouse, scrub the timeline, switch scenario and checkpoint from the right, and leave the ghost on to see where the untrained policy was at the same step.
+Both profiles, replayed at four points during training. Orbit with the mouse, scrub the timeline, switch scenario and checkpoint from the right, and leave the ghost on to see where the untrained policy was at the same step.
 
 Nothing is simulated in the browser. `scripts/export_trajectory.py` plays greedy episodes against a live policy and writes every position to `docs/trajectory.json`; the page draws that file and computes nothing of its own. Greedy rather than sampled, because training reward is noisy while the policy is still exploring and the honest question is what it would do if you asked it now.
 
-| profile | mean reward, 5 seeds | drones home | spread across seeds at 2000 |
+| profile | mean reward, 5 seeds | drones home | spread across seeds at the end |
 |---|---|---|---|
-| One drone, 5x5 | `-28.49` to `+11.06` | `0.0` to `1.0` of 1 | **`0`** |
-| Four drones, 8x8 | `-89.72` to `+182.93` | `0.2` to `0.8` of 4 | **`491`** |
+| One drone, 5x5 | `-28.50` to `+61.06` | `0.0` to `1.0` of 1 | **`0`** |
+| Four drones, 8x8 | `-165.18` to `+245.25` | `0.0` to `4.0` of 4 | **`0`** |
 
-That last column is the whole story, and it is why the curve is drawn as a band rather than a line.
+That last column is why the curve is drawn as a band rather than a line. A zero-width band means all five seeds finished on the same number, which is convergence rather than an average of runs that disagreed with each other.
 
-**On the small profile the seeds agree completely.** All five land on exactly `+11.06` with the drone home. That is convergence, and it is reproducible.
-
-**On the multi-drone profile they do not agree at all.** Across five seeds the final reward runs from `-145.64` to `+345.77`. One seed never gets above where it started. The mean improves by 273 and means very little, because it is averaging runs that did different things.
-
-**Reward moves further than arrivals do,** on both profiles but worse on the second: mean arrivals go from 0.2 to 0.8 of four drones. Shaping pays for movement toward a goal, and a policy can collect most of that by drifting the right way forever without finishing.
+Scrubbing the fleet timeline is the part worth doing. Untrained, the drones refuse **76** moves across 40 steps, roughly two every step, which is four drones colliding continuously. At 2000 episodes that falls to 8 refusals and three drones arrive. At 4000 it reaches zero refusals and all four arrive in 14 steps, and 8000 does not improve on 14 because 14 is the floor.
 
 Two details in the viewer exist to keep it honest. The replayed routes are the **median seed**, not the first one, so a single lucky or unlucky run cannot flatter or libel the average printed beside it. And an early single-seed export scored *better untrained* than after 2000 episodes, which was network initialisation luck; that is why torch is now seeded and the curve is averaged.
 
@@ -243,7 +264,9 @@ Bounds are per-dimension, for the reason described above. One scalar bound canno
 
 Moves clamp at the grid edge, so an illegal move is absorbed rather than rejected. `action_map` carries the human-readable names.
 
-**Reward**: summed across the fleet. Per drone, `+10.0` at its goal, `-2.0` for a refused move, `-1.0` otherwise. `terminated` on goal, `truncated` at `max_steps`. The agent starts at the origin and the goal sits at the far corner, so the shortest unobstructed path under this config is 38 moves. A collision costs more than a wasted step; if it cost the same, nothing would tell the policy to route around anything.
+**Reward**: reported as a fleet total, but computed and learned from per drone. `-1.0` per step, `-2.0` for a refused move, `+10.0` once on first reaching the goal, and `+50.0` to every drone when the last one arrives. `terminated` when all are home, `truncated` at `max_steps`.
+
+Three of those four terms exist to price a specific failure. A collision costs more than a wasted step, or nothing would tell the policy to route around anything. Arrival pays **once** rather than per step, because per-step goal pay made a parked drone an income stream. And the completion bonus has to outweigh what stranding a drone could earn, or the optimal policy is to leave one behind on purpose. That is not hypothetical: under the earlier reward, bringing three of four drones home scored `+500` against `-40` for solving the task.
 
 That shipped reward is deliberately spiky: the goal bonus is an event, not a gradient. It is the top left quadrant below, and it is the cheapest thing that works for a single drone. Once more than one drone shares the grid, the quadrant matters, because a spike is exactly what a policy learns to farm.
 
@@ -471,7 +494,7 @@ Total reward over 5 steps = -5.00
   - Hallucination errors: 0 (0.00% of steps)
 ```
 
-Those two zeroes are the whole point of the section above. Before the observation-space bounds were fixed, that same run reported a drift error on all 2000 of 2000 steps. Ten episodes on a 20x20 grid is far too short to reach a goal 38 moves away, which is why every episode returns the `-200.00` floor; the run demonstrates the validator layer, not convergence.
+Those two zeroes are the whole point of the section above. Before the observation-space bounds were fixed, that same run reported a drift error on all 2000 of 2000 steps. Ten episodes is far too short to learn anything on the shipped profile, so the rewards stay at the floor; this excerpt demonstrates the validator layer, not convergence. For convergence see the measured results above, which take 1000 episodes on the small profile and 8000 on the fleet.
 
 Serve the API:
 
