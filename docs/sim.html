@@ -261,7 +261,9 @@ let ghostRun = null;     // its untrained counterpart
 let drones = [], trails = [], stems = [], ghosts = [];
 let world = () => new THREE.Vector3();
 let cursor = 0, playing = true;
-const SPEED = 3.2;
+let holding = 0;              // seconds spent dwelling on the finished state
+const SPEED = 3.2;            // frames per second
+const HOLD_SECONDS = 2.4;     // how long to sit on the last frame before looping
 
 function disposeGroup(g) {
   g.traverse(o => {
@@ -476,6 +478,8 @@ function drawCurve(sc, activeEpisodes) {
 function selectRun(idx) {
   run = S.runs[idx];
   cursor = 0;
+  holding = 0;
+  holding = 0;
   el('scrub').max = run.frames.length - 1;
   [...el('runs').children].forEach((b, k) => b.setAttribute('aria-pressed', String(k === idx)));
   drawCurve(S, run.episodes);
@@ -526,6 +530,7 @@ el('play').addEventListener('click', () => {
 });
 el('scrub').addEventListener('input', e => {
   playing = false; el('play').textContent = 'Play';
+  holding = 0;
   cursor = Number(e.target.value); paint();
 });
 el('ghost').addEventListener('change', paint);
@@ -546,8 +551,22 @@ renderer.setAnimationLoop(now => {
   const dt = Math.min(0.1, Math.max(0, (now - last) / 1000));
   last = now;
   if (playing) {
-    cursor += dt * SPEED;
-    if (cursor >= run.frames.length - 1) cursor = 0;
+    const lastFrame = run.frames.length - 1;
+    if (cursor >= lastFrame) {
+      // Land on the final frame and stay there for a beat. The previous loop
+      // reset the cursor the moment it reached this point, so the last frame
+      // was never painted at all: playback jumped from the second-to-last step
+      // straight back to the start, and the finished state, every drone home,
+      // was the one thing the replay never actually showed.
+      cursor = lastFrame;
+      holding += dt;
+      if (holding >= HOLD_SECONDS) {
+        holding = 0;
+        cursor = 0;
+      }
+    } else {
+      cursor = Math.min(lastFrame, cursor + dt * SPEED);
+    }
   }
   paint();
   controls.update();
