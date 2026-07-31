@@ -1,0 +1,17 @@
+# Profile for the browser viewer in docs/sim.html.
+#
+# Sized to be watchable rather than to be hard: big enough that routes cross and
+# conflicts actually occur, small enough that a whole episode fits in a few
+# seconds of playback. The layout is fixed so the before and after trajectories
+# are the same task, which is the only way the comparison means anything.
+
+grid_size: 8
+num_drones: 4
+obstacle_density: 0.1
+max_steps: 40
+reward_shaping: true
+fixed_layout: true
+
+safety:
+  geofence_margin: 0
+  min_separation: 0
