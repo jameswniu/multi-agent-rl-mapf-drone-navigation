@@ -87,52 +87,9 @@ The validators report and continue; they do not halt a run. That is a deliberate
 
 The control loop is small. The validators hang off both halves of it, and everything they find funnels into one counter.
 
-```mermaid
-%%{init: {"theme":"base","themeVariables":{"fontSize":"17px","fontFamily":"ui-sans-serif, system-ui, sans-serif","lineColor":"#64748b"},"flowchart":{"curve":"basis","nodeSpacing":55,"rankSpacing":65,"padding":14}}}%%
-flowchart TB
-    CFG["<b>configs/env.yaml</b><br/>grid 20x20, 200 max steps"]
-
-    subgraph ENV["&nbsp;DroneEnv&nbsp; (gymnasium)&nbsp;"]
-        direction LR
-        STEP["<b>reset()</b> and <b>step(action)</b><br/>obs, reward, terminated,<br/>truncated, info"]
-        IV["<b>IntegrityValidator</b><br/>observation in space?<br/>action legal? reward finite?"]
-        STEP ==> IV
-    end
-
-    subgraph AGENT["&nbsp;PPOAgent&nbsp; (PyTorch)&nbsp;"]
-        direction LR
-        NET["<b>PPOPolicy</b><br/>shared Linear(5,64) + ReLU<br/>policy head, value head"]
-        PIV["<b>PolicyIntegrityValidator</b><br/>probs sum to 1? value finite?<br/>action in space?"]
-        NET ==> PIV
-    end
-
-    STATS["<b>IntegrityStats</b><br/>drift vs hallucination,<br/>as a rate per step"]
-    API["<b>FastAPI</b><br/>/predict &nbsp;/metrics &nbsp;/healthz"]
-    OPS["<b>Prometheus + Grafana</b>"]
-
-    CFG ==> ENV
-    ENV == "observation" ==> AGENT
-    AGENT == "action" ==> ENV
-    IV -.-> STATS
-    PIV -.-> STATS
-    AGENT ==> API
-    API ==> OPS
-
-    classDef cfg fill:#0d1b2a,stroke:#38bdf8,stroke-width:2px,color:#e2e8f0
-    classDef core fill:#132a3f,stroke:#00d4ff,stroke-width:2px,color:#e2e8f0
-    classDef brain fill:#1b263b,stroke:#b537f2,stroke-width:2px,color:#e2e8f0
-    classDef guard fill:#2a1220,stroke:#ff006e,stroke-width:3px,color:#ffd7e6
-    classDef ops fill:#0d1b2a,stroke:#39ff14,stroke-width:2px,color:#e2e8f0
-
-    class CFG cfg
-    class STEP core
-    class NET brain
-    class IV,PIV,STATS guard
-    class API,OPS ops
-
-    style ENV fill:#0a1422,stroke:#00d4ff,stroke-width:2px,color:#7dd3fc
-    style AGENT fill:#0a1422,stroke:#b537f2,stroke-width:2px,color:#d8b4fe
-```
+<p align="center">
+  <img src="assets/architecture.svg" alt="PPO control loop: configs/env.yaml feeds DroneEnv, which exchanges observations and actions with PPOAgent. An IntegrityValidator sits inside the environment and a PolicyIntegrityValidator inside the agent; both report into IntegrityStats. The agent is served behind FastAPI, scraped by Prometheus and Grafana." width="100%">
+</p>
 
 The three pink boxes are the subject of this repository. Everything else is scaffolding around them.
 
