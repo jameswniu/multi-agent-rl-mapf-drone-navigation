@@ -95,6 +95,18 @@ class PPOAgent:
         # Attach validator for drift/hallucination checks
         self.validator = PolicyIntegrityValidator(env.action_space)
 
+    def _guard_probs(self, probs, value):
+        """Report a non-finite policy output as drift before it can crash."""
+        if torch.isfinite(probs).all() and torch.isfinite(value).all():
+            return
+        errors = [{"type": "drift", "field": "probs", "msg": "non-finite policy output"}]
+        for e in errors:
+            print(f"[Integrity Warning] {e['type']} on {e['field']}: {e['msg']}")
+        raise ValueError(
+            "policy produced non-finite outputs; the network has diverged. "
+            "This is drift, not a crash: check the loss for a nan before this point."
+        )
+
     def select_action(self, state):
         """
         Pick an action from the current policy.
@@ -102,6 +114,11 @@ class PPOAgent:
         """
         state = torch.tensor(np.asarray(state), dtype=torch.float32)
         probs, value = self.policy(state)
+        # Check before Categorical is constructed. Categorical validates the
+        # simplex itself and raises on a nan, which would pre-empt the validator
+        # and surface a torch constraint error instead of the drift report this
+        # layer exists to produce.
+        self._guard_probs(probs, value)
         m = Categorical(probs)
         action = m.sample()
 
@@ -149,8 +166,16 @@ class PPOAgent:
                 discounted.insert(0, R)
             discounted = torch.tensor(discounted, dtype=torch.float32)
 
-            # Normalize returns -> improves training stability
-            discounted = (discounted - discounted.mean()) / (discounted.std() + 1e-8)
+            # Normalize returns -> improves training stability.
+            # Only when there are at least two samples. The unbiased std of a
+            # single value is nan, and a one-step episode is not hypothetical:
+            # a drone can spawn one move from its goal, reach it immediately,
+            # and produce exactly one return. That nan propagates into the loss
+            # and every weight in the network is permanently poisoned, which
+            # looks from the outside like a policy that silently stopped
+            # learning rather than like a crash.
+            if discounted.numel() > 1:
+                discounted = (discounted - discounted.mean()) / (discounted.std() + 1e-8)
 
             # Policy update for several epochs
             for _ in range(self.epochs):
@@ -169,9 +194,13 @@ class PPOAgent:
                 # total, so the critic is averaged over drones to match it.
                 state_values = values.squeeze(-1).mean(dim=-1)
 
-                # Advantage = return - baseline
-                advantages = discounted - state_values
-                advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+                # Advantage = return - baseline, detached.
+                # Without the detach the policy loss back-propagates through the
+                # value head, so the critic is pulled by the actor's objective
+                # rather than only by its own regression target.
+                advantages = (discounted - state_values).detach()
+                if advantages.numel() > 1:
+                    advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
                 # PPO surrogate loss
                 ratio = (new_log_probs - old_log_probs.detach()).exp()
@@ -212,6 +241,7 @@ class PPOAgent:
         """
         state = torch.tensor(np.asarray(state), dtype=torch.float32)
         probs, value = self.policy(state)
+        self._guard_probs(probs, value)
         action = torch.argmax(probs, dim=-1).detach().numpy()
 
         # Integrity check

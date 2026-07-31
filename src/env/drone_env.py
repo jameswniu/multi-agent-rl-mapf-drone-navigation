@@ -45,6 +45,16 @@ class DroneEnv(gym.Env):
         self.num_drones: int = max(1, int(self.config.get("num_drones", 1)))
         self.obstacle_density: float = float(self.config.get("obstacle_density", 0.0))
         self.max_steps: int = int(self.config.get("max_steps", 100))
+        # Potential-based reward shaping. Off by default because it changes the
+        # reward a run reports, and a number that silently means something else
+        # is worse than a hard task.
+        self.reward_shaping: bool = bool(self.config.get("reward_shaping", False))
+        # A fixed layout makes the task stationary: the same starts and goals
+        # every episode. Random placement re-poses the problem on every reset,
+        # which is a much harder thing to learn and hides whether the learner
+        # works at all. Off by default; the demo profile turns it on.
+        self.fixed_layout: bool = bool(self.config.get("fixed_layout", False))
+        self.shaping_gamma: float = float(self.config.get("shaping_gamma", 0.99))
 
         # Per drone: [x, y, goal_x, goal_y, steps_remaining,
         #             blocked_up, blocked_down, blocked_left, blocked_right]
@@ -130,6 +140,17 @@ class DroneEnv(gym.Env):
         free = self._free_cells()
         # Never spawn a drone somewhere the geofence would immediately trap it.
         free = np.array([c for c in free if self.safety.in_geofence(int(c[0]), int(c[1]))])
+
+        if self.fixed_layout:
+            # Deterministic and reproducible: the first free cells become starts,
+            # the last become goals, so drones begin far from where they finish.
+            if len(free) < 2 * self.num_drones:
+                raise ValueError("not enough free cells for a fixed layout")
+            order = np.lexsort((free[:, 1], free[:, 0]))
+            ordered = free[order]
+            self.positions = ordered[: self.num_drones].astype(np.float32)
+            self.goals = ordered[-self.num_drones :][::-1].astype(np.float32)
+            return
         needed = 2 * self.num_drones
         if len(free) < needed:
             raise ValueError(
@@ -180,6 +201,14 @@ class DroneEnv(gym.Env):
                 ]
             )
         return np.array(rows, dtype=np.float32)
+
+    def _potential(self, positions) -> np.ndarray:
+        """Negative Manhattan distance to each drone's goal.
+
+        Used as the shaping potential. Closer to the goal is a higher potential,
+        so moving toward it earns a small positive shaping term.
+        """
+        return -np.abs(positions - self.goals).sum(axis=1)
 
     def _target(self, index: int, action: int) -> Tuple[float, float]:
         """Where one action would take one drone, clamped at the grid edge."""
@@ -270,6 +299,17 @@ class DroneEnv(gym.Env):
 
         at_goal = np.all(self.positions == self.goals, axis=1)
         rewards = np.where(at_goal, 10.0, np.where(collided, -2.0, -1.0))
+
+        if self.reward_shaping:
+            # F = gamma * phi(s') - phi(s). Ng, Harada and Russell (1999) show
+            # this leaves the optimal policy unchanged, so it guides exploration
+            # without redefining what a good route is. A sparse +10 at the goal
+            # is almost never stumbled upon on a large grid, which is why an
+            # unshaped run looks like it is not learning at all.
+            before = self._potential(np.array(current, dtype=np.float32))
+            after = self._potential(self.positions)
+            rewards = rewards + self.shaping_gamma * after - before
+
         reward = float(rewards.sum())
 
         terminated = bool(at_goal.all())
@@ -288,6 +328,25 @@ class DroneEnv(gym.Env):
             info["integrity_errors"] = errors
 
         return obs, reward, terminated, truncated, info
+
+    def render(self):
+        """Draw the grid as text.
+
+        ``metadata`` has always advertised a human render mode without providing
+        one. Letters are drones, digits are their goals, and ``#`` is an
+        obstacle. Row order is flipped so y increases upward, which is what the
+        coordinates say and not what list order gives you.
+        """
+        grid = [["." for _ in range(self.grid_size)] for _ in range(self.grid_size)]
+        for x in range(self.grid_size):
+            for y in range(self.grid_size):
+                if self.obstacles[x, y]:
+                    grid[y][x] = "#"
+        for i, (gx, gy) in enumerate(self.goals.astype(int)):
+            grid[gy][gx] = str(i % 10)
+        for i, (x, y) in enumerate(self.positions.astype(int)):
+            grid[y][x] = chr(ord("A") + i % 26)
+        return "\n".join(" ".join(row) for row in reversed(grid))
 
     def close(self):
         """Cleanup resources (none for this simple env)."""

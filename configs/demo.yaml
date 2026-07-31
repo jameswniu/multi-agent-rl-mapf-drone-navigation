@@ -1,0 +1,21 @@
+# Demonstration profile.
+# One drone, 5x5, potential-based shaping, and a fixed layout.
+#
+# The fixed layout is the load-bearing part. With random starts and goals the
+# task is re-posed every episode and this agent does not learn it; with the
+# layout held still it learns in six seeds out of six, reaching roughly +10 from
+# roughly -20 inside 200 episodes.
+#
+# The shipped configs/env.yaml is deliberately harder and is NOT solved by this
+# implementation. See the README for what the demo does and does not show.
+
+grid_size: 5
+num_drones: 1
+obstacle_density: 0.0
+max_steps: 30
+reward_shaping: true
+fixed_layout: true
+
+safety:
+  geofence_margin: 0
+  min_separation: 0

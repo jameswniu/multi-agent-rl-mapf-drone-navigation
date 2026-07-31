@@ -15,8 +15,8 @@
 <img alt="python 3.10" src="https://img.shields.io/badge/python-3.10-dfe3e0?style=flat-square&labelColor=0d1410">
 <img alt="PPO in PyTorch 2.2.2" src="https://img.shields.io/badge/PPO-PyTorch_2.2.2-8f9491?style=flat-square&labelColor=0d1410">
 <img alt="env gymnasium" src="https://img.shields.io/badge/env-gymnasium-8f9491?style=flat-square&labelColor=0d1410">
-<img alt="tests 42 passing" src="https://img.shields.io/badge/tests-42_passing-8f9491?style=flat-square&labelColor=0d1410">
-<img alt="coverage 88 percent" src="https://img.shields.io/badge/coverage-88%25-8f9491?style=flat-square&labelColor=0d1410">
+<img alt="tests 49 passing" src="https://img.shields.io/badge/tests-49_passing-8f9491?style=flat-square&labelColor=0d1410">
+<img alt="coverage 89 percent" src="https://img.shields.io/badge/coverage-89%25-8f9491?style=flat-square&labelColor=0d1410">
 <img alt="license Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-8f9491?style=flat-square&labelColor=0d1410">
 
 <br/><br/>
@@ -88,6 +88,28 @@ Two validators in [`src/integrity_validators.py`](src/integrity_validators.py), 
 ```
 
 The validators report and continue; they do not halt a run. That is the right call for a training loop and the wrong one for anything that flies, which is why the [Safety Controller](#the-safety-controller) exists as a separate component. Reporting and refusing are different jobs and are kept in different objects.
+
+---
+
+## What actually learns, and what does not
+
+Run `python -m main --demo`. It is in two parts because there are two separate claims, and only one of them scales.
+
+**The agent learns the small profile.** `configs/demo.yaml` is one drone on a 5x5 grid with potential-based shaping and a fixed layout. Five seeds out of five reach roughly `+10` from roughly `-20` inside 200 episodes, against an optimum of 8 moves.
+
+**The agent does not learn the shipped profile.** Ten drones on a 20x20 grid with random starts and goals is not solved by this implementation. Sixty episodes move it nowhere, with or without shaping. That is stated here rather than buried because the default entry point used to print a wall of flat negative rewards, which reads as a broken project regardless of what else is true.
+
+Three things separate those two cases, and each was a real bug found by running rather than reading:
+
+| defect | effect |
+|---|---|
+| A one-step episode gives a single return, and the unbiased standard deviation of one sample is `nan` | The normalized return became `nan`, poisoning every weight permanently. About 9 percent of random layouts spawn a drone one move from its goal, so this fired often and looked like a policy that had quietly stopped learning |
+| The policy loss back-propagated through the value head | Advantages were never detached, so the critic was pulled by the actor's objective rather than only by its own regression target |
+| A sparse `+10` at the goal is almost never stumbled upon | Potential-based shaping, `F = gamma * phi(s') - phi(s)`, guides exploration. Ng, Harada and Russell (1999) show it leaves the optimal policy unchanged, so it adds guidance without redefining a good route |
+
+**The safety machinery holds regardless.** Conflict refusal and the Safety Controller are enforced by the environment, not learned, so they hold while the policy is choosing at random. Part 2 of the demo shows exactly that: conflicting moves refused, and zero drones sharing a cell, on a policy that has learned nothing.
+
+An honest reading of this repository is that the harness is finished and the learner is not.
 
 ---
 
@@ -309,6 +331,11 @@ Worth reading before the deployment sections. The repository name is older than 
 | MAPF, multi-agent path finding | **Implemented**. Vertex, swap and stationary conflicts detected and refused each step |
 | Obstacles | **Implemented**. Drawn from `obstacle_density`, refuse movement, and are locally sensed |
 | Safety Controller | **Implemented**. Geofence and separation, the only component permitted to veto |
+| Learning, small fixed profile | **Implemented**. 5 of 5 seeds solve `configs/demo.yaml` |
+| Learning, shipped profile | **Not solved**. Ten drones on 20x20 with random layouts defeats this implementation |
+| Potential-based reward shaping | **Implemented**, off by default via `reward_shaping` |
+| Fixed layouts for reproducible tasks | **Implemented** via `fixed_layout` |
+| `render()` | **Implemented**. `metadata` had advertised a human render mode with nothing behind it |
 | Ingestion, Preprocess and Prediction agents; Supervisor | **Design only**, described in [`architecture/summary.md`](architecture/summary.md), no code in `src/` |
 
 The name now describes the code: multiple drones share one grid, see each other, and have their conflicting moves refused. What remains is the Safety Controller, the first component that would be allowed to veto rather than only report.
@@ -363,8 +390,9 @@ Full written spec in [`architecture/low_level_design.txt`](architecture/low_leve
 
 Roughly in dependency order:
 
-1. A learned conflict policy. Today conflicts and vetoes are refusals, which is correct but blunt: the drone simply stops. Yielding, by remaining distance or by who is closer to their goal, would be a real coordination signal rather than a stall.
-2. Altitude and return-to-home, the two rules from the low level design the grid cannot express while it is flat.
+1. Scale the learning to the shipped profile. This is the honest headline item: the harness is done, the learner is not.
+2. A learned conflict policy. Today conflicts and vetoes are refusals, which is correct but blunt: the drone simply stops. Yielding, by remaining distance or by who is closer to their goal, would be a real coordination signal rather than a stall.
+3. Altitude and return-to-home, the two rules from the low level design the grid cannot express while it is flat.
 
 Done: the Safety Controller vetoes on geofence and separation, multiple drones share the grid with vertex, swap and stationary conflicts refused, obstacles are generated and sensed, the `/predict` contract now takes one observation row per drone and is covered by tests that do not stub the agent, and `configs/train.yaml` is loaded and applied rather than silently discarded.
 
@@ -457,9 +485,10 @@ pytest --cov=src --cov-report=term-missing
 | `tests/test_obstacles.py` | Density, determinism, refused moves, the collision penalty, and the sensor flags |
 | `tests/test_multi_drone.py` | Fleet contract, distinct starts and goals, and the three conflict kinds |
 | `tests/test_safety_controller.py` | Geofence and separation vetoes, veto symmetry, and that permissive defaults change nothing |
+| `tests/test_learning_fixes.py` | The one-step nan poisoning, non-finite output reported as drift, shaping, fixed layouts, render, and a demo smoke test |
 | `tests/test_load.py` | Repeated stepping under pressure |
 
-Current state: 42 passing, 88 percent line coverage.
+Current state: 49 passing, 89 percent line coverage.
 
 ---
 

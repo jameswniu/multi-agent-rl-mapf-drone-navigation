@@ -144,6 +144,82 @@ def run_inference(agent, env, rollout_len=5):
     stats.report(prefix="[Inference Integrity Report]")
 
 
+
+
+def run_demo(blocks=5, per_block=40, fleet_steps=8):
+    """Show what this repository actually demonstrates, and what it does not.
+
+    Two parts, because they are two different claims. The first is that the
+    agent learns, which holds only on the small profile in configs/demo.yaml.
+    The second is that the safety machinery holds regardless of whether the
+    agent is any good, which is the part that is true at any scale.
+    """
+    import io
+    import contextlib
+    import numpy as np
+
+    print("=" * 72)
+    print("PART 1  Does the agent learn?")
+    print("=" * 72)
+    print("configs/demo.yaml: one drone, 5x5, potential-based shaping.")
+    print("Optimal route is 8 moves. Watch the mean reward per block of 40.")
+    print()
+
+    env = DroneEnv("configs/demo.yaml")
+    agent = PPOAgent(env)
+    for block in range(blocks):
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            agent.train(num_episodes=per_block)
+        got = [float(x.split("=")[1]) for x in buf.getvalue().splitlines() if "total reward" in x]
+        bar = "#" * max(0, int((np.mean(got) + 30) / 1.5))
+        lo, hi = block * per_block + 1, block * per_block + per_block
+        print(f"  episodes {lo:>3} to {hi:>3}   mean {np.mean(got):7.2f}  {bar}")
+    print()
+
+    print("=" * 72)
+    print("PART 2  Does the safety machinery hold?")
+    print("=" * 72)
+    print("Letters are drones, digits are their goals, # is an obstacle.")
+    print("This part does not depend on the policy being any good.")
+    print()
+
+    fleet = DroneEnv("configs/env.yaml")
+    fleet.reset(seed=7)
+    print(fleet.render())
+    print()
+
+    rng = np.random.default_rng(11)
+    refused = 0
+    vetoed = 0
+    for step in range(1, fleet_steps + 1):
+        _, reward, _, _, info = fleet.step(rng.integers(0, 5, size=fleet.num_drones))
+        refused += info.get("collisions", 0)
+        vetoed += info.get("safety_vetoes", 0)
+        note = f"  step {step}: reward {reward:7.1f}"
+        if info.get("collisions"):
+            note += f"   {info['collisions']} conflicting move(s) refused"
+        if info.get("safety_vetoes"):
+            note += f"   {info['safety_vetoes']} vetoed ({', '.join(info['veto_reasons'])})"
+        print(note)
+
+    occupied = {(int(x), int(y)) for x, y in fleet.positions}
+    print()
+    print(f"  {refused} conflicting moves refused, {vetoed} vetoed by the Safety Controller.")
+    print(f"  Drones sharing a cell at any point: {fleet.num_drones - len(occupied)}")
+    print("  Collision freedom is enforced by the environment, not learned, so it")
+    print("  holds even while the policy is choosing at random.")
+    print()
+
+    print("=" * 72)
+    print("WHAT THIS DOES NOT SHOW")
+    print("=" * 72)
+    print("  The shipped configs/env.yaml, ten drones on a 20x20 grid with random")
+    print("  starts and goals, is NOT solved by this implementation. Part 1 uses a")
+    print("  smaller profile on purpose. Scaling the learning up is open work.")
+    print()
+
+
 def parse_args(argv=None):
     """Command line surface for a training run."""
     parser = argparse.ArgumentParser(
@@ -167,6 +243,11 @@ def parse_args(argv=None):
         help="Where to write the trained weights.",
     )
     parser.add_argument(
+        "--demo",
+        action="store_true",
+        help="Run the guided demonstration instead of a plain training run.",
+    )
+    parser.add_argument(
         "--rollout-len",
         type=int,
         default=5,
@@ -177,6 +258,9 @@ def parse_args(argv=None):
 
 def main(argv=None):
     args = parse_args(argv)
+    if args.demo:
+        run_demo()
+        return
     config = load_train_config(args.config)
 
     # Precedence: explicit flag, then config file, then the built-in default.
