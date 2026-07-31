@@ -113,6 +113,43 @@ An honest reading of this repository is that the harness is finished and the lea
 
 ---
 
+## Watch it in the browser
+
+<div align="center">
+  <a href="https://jameswniu.github.io/multi-agent-rl-mapf-drone-navigation/sim.html">
+    <img src="assets/sim-preview.png" alt="Browser viewer: four drones on an eight by eight grid, one of them green because it has reached its goal, with obstacles as raised blocks, goals as flat green pads, and each drone's route traced on the floor" width="100%">
+  </a>
+  <br>
+  <a href="https://jameswniu.github.io/multi-agent-rl-mapf-drone-navigation/sim.html"><b>Open the viewer</b></a>
+</div>
+
+Four drones, an 8x8 grid, and the same fixed layout replayed at four points during a single training run. Orbit with the mouse, scrub the timeline, switch checkpoints from the panel on the right.
+
+Nothing in it is simulated in the browser. `scripts/export_trajectory.py` plays greedy episodes against a live policy and writes every position to `docs/trajectory.json`; the page draws that file and computes nothing of its own. Greedy rather than sampled, because training reward is noisy while the policy is still exploring and the honest question is what it would do if you asked it now.
+
+| checkpoint | total reward | reached goal | moves refused |
+|---|---|---|---|
+| Untrained | `-154.27` | 0 of 4 | 0 |
+| 500 episodes | `-132.54` | 0 of 4 | 0 |
+| 1000 episodes | `-182.33` | 0 of 4 | 40 |
+| 2000 episodes | `+182.33` | 1 of 4 | 0 |
+
+Two things in that table are worth more than the headline improvement.
+
+**It gets worse before it gets better.** The 1000-episode checkpoint is below where it started, and its 40 refusals are one per step: the drones found each other and deadlocked. Learning here is not monotonic, and a run reported only at its endpoints would hide that.
+
+**The reward moves further than the arrivals do.** Reward improves by 336 while exactly one more drone gets home. The shaping term pays for movement toward a goal, and a policy can collect most of it by drifting the right way forever without ever finishing. In the last four steps of the trained run the per-step reward is `+7.23` repeated, which is one drone parked on its goal and the other three still wandering.
+
+The matching `-182.33` and `+182.33` are a coincidence, not a sign error. The per-step distributions behind them share no values.
+
+Regenerate it against your own run with:
+
+```bash
+python scripts/export_trajectory.py --episodes 2000 --out docs/trajectory.json
+```
+
+---
+
 ## The Safety Controller
 
 The one component here allowed to **veto**. Everything else in the integrity layer describes what happened; this changes what happens. It sits between the policy's proposal and the environment's movement resolution, so a move it refuses never reaches conflict resolution at all.
