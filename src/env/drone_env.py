@@ -36,12 +36,16 @@ class DroneEnv(gym.Env):
         self.obstacle_density: float = float(self.config.get("obstacle_density", 0.0))
         self.max_steps: int = int(self.config.get("max_steps", 100))
 
-        # Observation: [x, y, goal_x, goal_y, steps_remaining]
-        # Bounds are per-dimension: the four coordinates are clamped to the grid,
-        # while steps_remaining counts down from max_steps. A single scalar bound
-        # would put every steps_remaining > grid_size outside the declared space.
+        # Observation: [x, y, goal_x, goal_y, steps_remaining,
+        #               blocked_up, blocked_down, blocked_left, blocked_right]
+        # Bounds are per-dimension: the coordinates are clamped to the grid, while
+        # steps_remaining counts down from max_steps. A single scalar bound would
+        # put every steps_remaining > grid_size outside the declared space.
+        # The four trailing flags are local sensing. Without them a drone cannot
+        # see an obstacle before hitting it, so avoidance is not learnable and the
+        # obstacles would only ever be a tax on a blind policy.
         self.observation_space = spaces.Box(
-            low=np.zeros(5, dtype=np.float32),
+            low=np.zeros(9, dtype=np.float32),
             high=np.array(
                 [
                     self.grid_size - 1,
@@ -49,6 +53,10 @@ class DroneEnv(gym.Env):
                     self.grid_size - 1,
                     self.grid_size - 1,
                     self.max_steps,
+                    1.0,
+                    1.0,
+                    1.0,
+                    1.0,
                 ],
                 dtype=np.float32,
             ),
@@ -70,6 +78,8 @@ class DroneEnv(gym.Env):
         self.position = np.zeros(2, dtype=np.float32)
         self.goal = np.array([self.grid_size - 1, self.grid_size - 1], dtype=np.float32)
         self.steps = 0
+        # Populated on reset, once the seeded RNG exists.
+        self.obstacles = np.zeros((self.grid_size, self.grid_size), dtype=bool)
 
     # ------------------------------------------------------------------
     # Utility methods
@@ -93,10 +103,51 @@ class DroneEnv(gym.Env):
                     data[key.strip()] = float(value) if "." in value else int(value)
             return data
 
+    def _generate_obstacles(self) -> np.ndarray:
+        """Draw a fresh obstacle grid from the seeded RNG.
+
+        The start and goal cells are always cleared. A blocked start would make
+        the episode meaningless, and a blocked goal would make it unwinnable, so
+        neither is left to chance.
+        """
+        grid = np.zeros((self.grid_size, self.grid_size), dtype=bool)
+        if self.obstacle_density <= 0:
+            return grid
+
+        grid = self.np_random.random((self.grid_size, self.grid_size)) < self.obstacle_density
+        grid[0, 0] = False
+        grid[self.grid_size - 1, self.grid_size - 1] = False
+        return grid
+
+    def _is_obstacle(self, x: int, y: int) -> bool:
+        """True when the cell holds an obstacle. Out of bounds is not an obstacle."""
+        if not (0 <= x < self.grid_size and 0 <= y < self.grid_size):
+            return False
+        return bool(self.obstacles[x, y])
+
+    def _is_impassable(self, x: int, y: int) -> bool:
+        """What the drone's local sensor reports: a wall reads the same as an obstacle."""
+        if not (0 <= x < self.grid_size and 0 <= y < self.grid_size):
+            return True
+        return bool(self.obstacles[x, y])
+
+    def _sensor_flags(self) -> list:
+        """Blocked flags for the four moves, in action order: up, down, left, right."""
+        x, y = int(self.position[0]), int(self.position[1])
+        neighbours = [(x, y + 1), (x, y - 1), (x - 1, y), (x + 1, y)]
+        return [1.0 if self._is_impassable(nx, ny) else 0.0 for nx, ny in neighbours]
+
     def _get_obs(self) -> np.ndarray:
         steps_remaining = self.max_steps - self.steps
         return np.array(
-            [self.position[0], self.position[1], self.goal[0], self.goal[1], steps_remaining],
+            [
+                self.position[0],
+                self.position[1],
+                self.goal[0],
+                self.goal[1],
+                steps_remaining,
+                *self._sensor_flags(),
+            ],
             dtype=np.float32,
         )
 
@@ -105,6 +156,7 @@ class DroneEnv(gym.Env):
     # ------------------------------------------------------------------
     def reset(self, *, seed: int | None = None, options: dict | None = None) -> Tuple[np.ndarray, Dict[str, Any]]:
         super().reset(seed=seed)
+        self.obstacles = self._generate_obstacles()
         self.position = np.zeros(2, dtype=np.float32)
         self.goal = np.array([self.grid_size - 1, self.grid_size - 1], dtype=np.float32)
         self.steps = 0
@@ -115,24 +167,38 @@ class DroneEnv(gym.Env):
     def step(self, action: int) -> Tuple[np.ndarray, float, bool, bool, Dict[str, Any]]:
         self.steps += 1
 
-        # Move drone
+        # Where the action would take the drone. Edges clamp, so a move into a
+        # wall is absorbed rather than rejected.
+        x, y = float(self.position[0]), float(self.position[1])
         if action == 1:  # up
-            self.position[1] = min(self.grid_size - 1, self.position[1] + 1)
+            y = min(self.grid_size - 1, y + 1)
         elif action == 2:  # down
-            self.position[1] = max(0, self.position[1] - 1)
+            y = max(0, y - 1)
         elif action == 3:  # left
-            self.position[0] = max(0, self.position[0] - 1)
+            x = max(0, x - 1)
         elif action == 4:  # right
-            self.position[0] = min(self.grid_size - 1, self.position[0] + 1)
+            x = min(self.grid_size - 1, x + 1)
         # action 0 -> hover
+
+        # An obstacle refuses the move outright: the drone stays where it was.
+        collided = self._is_obstacle(int(x), int(y))
+        if not collided:
+            self.position[0], self.position[1] = x, y
 
         obs = self._get_obs()
 
         terminated = bool(np.array_equal(self.position, self.goal))
-        reward = 10.0 if terminated else -1.0
+        if terminated:
+            reward = 10.0
+        else:
+            # A collision costs more than a wasted step, otherwise there is no
+            # gradient telling the policy to route around anything.
+            reward = -2.0 if collided else -1.0
         truncated = bool(self.steps >= self.max_steps)
 
         info: Dict[str, Any] = {}
+        if collided:
+            info["collision"] = True
         errors = self.validator.validate(obs, action, reward)
         if errors:
             info["integrity_errors"] = errors
