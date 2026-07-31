@@ -1,14 +1,17 @@
-# This Dockerfile is optimized for production (small, fast image)
+# Production image.
+# Deliberately built the same way as docker/Dockerfile. An earlier version
+# copied src/ to the image root, which left the API unservable because the
+# package layout no longer agreed with what the entrypoints import, and CI
+# never caught it because it only ever built the development image.
+# One layout, one set of import paths.
 
-FROM python:3.10-slim as base
+FROM python:3.10-slim
 WORKDIR /app
 
-# Install dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the actual source code
-COPY src/ .
+COPY . .
+RUN pip install --no-cache-dir -e .
 
-# Run the app
-CMD ["python", "main.py"]
+CMD ["python", "-m", "main"]

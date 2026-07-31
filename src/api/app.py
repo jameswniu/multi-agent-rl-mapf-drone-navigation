@@ -15,17 +15,17 @@ import time
 
 # Prometheus metrics utilities
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
-from src.utils.metrics import REQUEST_COUNT, REQUEST_LATENCY
+from utils.metrics import REQUEST_COUNT, REQUEST_LATENCY
 
 # Central logging utility
-from src.utils.logger import get_logger
+from utils.logger import get_logger
 
 # Custom error handling
-from src.utils.errors import APIError, error_handler
+from utils.errors import APIError, error_handler
 
 # Domain-specific code: environment and agent
-from src.env.drone_env import DroneEnv
-from src.agents.ppo_agent import PPOAgent
+from env.drone_env import DroneEnv
+from agents.ppo_agent import PPOAgent
 
 
 class StateInput(BaseModel):

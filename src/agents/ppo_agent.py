@@ -21,6 +21,7 @@ import numpy as np
 from torch.distributions import Categorical
 
 from integrity_validators import PolicyIntegrityValidator  # schema-based validator
+from utils.metrics import TRAINING_REWARD  # episode reward, for Prometheus
 
 
 # ---------------- Policy Network ----------------
@@ -190,7 +191,11 @@ class PPOAgent:
                 loss.backward()
                 self.optimizer.step()
 
-            print(f"Episode {ep+1}, total reward={sum(rewards):.2f}")
+            episode_reward = sum(rewards)
+            # Declared in utils/metrics.py and, until now, never written to, so
+            # the Grafana training-reward panel had no series behind it.
+            TRAINING_REWARD.observe(episode_reward)
+            print(f"Episode {ep+1}, total reward={episode_reward:.2f}")
 
     def save(self, path):
         """Save model weights to disk."""
