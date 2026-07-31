@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/hero.svg" alt="Drone navigation that checks its own work: a PPO agent on a grid world wrapped in a validator layer separating drift from hallucination" width="100%">
+</p>
+
 <div align="center">
 
 <b><font size="6">Multi-Agent RL MAPF Drone Navigation</font></b>

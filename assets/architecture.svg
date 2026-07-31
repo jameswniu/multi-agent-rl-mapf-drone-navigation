@@ -1,113 +1,146 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 1200" width="980" height="1200" role="img" aria-label="Architecture: configs/env.yaml feeds the DroneEnv, the PPO agent closes the loop, a validator band watches both sides and reports into IntegrityStats, and the policy is served behind FastAPI" font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 1240" width="980" height="1240" role="img" aria-label="System map: configs/env.yaml feeds the DroneEnv, the PPO agent closes the loop, a validator band watches both sides and reports into IntegrityStats, and the policy is served behind FastAPI" font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif">
 <defs>
-  <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-    <stop offset="0" stop-color="#12161d"/>
-    <stop offset="1" stop-color="#0a0d12"/>
+  <linearGradient id="bg" x1="0" y1="0" x2="0.4" y2="1">
+    <stop offset="0" stop-color="#0d131b"/>
+    <stop offset="0.55" stop-color="#080c12"/>
+    <stop offset="1" stop-color="#05080c"/>
   </linearGradient>
+  <pattern id="grid" width="26" height="26" patternUnits="userSpaceOnUse">
+    <circle cx="1" cy="1" r="0.7" fill="#16202c"/>
+  </pattern>
   <linearGradient id="chrome" x1="0" y1="0" x2="1" y2="0">
-    <stop offset="0" stop-color="#8d99a8"/>
-    <stop offset="0.35" stop-color="#e6edf5"/>
-    <stop offset="0.62" stop-color="#9aa6b5"/>
-    <stop offset="1" stop-color="#dfe7f0"/>
+    <stop offset="0" stop-color="#5d6b7d"/>
+    <stop offset="0.28" stop-color="#eaf2fa"/>
+    <stop offset="0.5" stop-color="#93a2b4"/>
+    <stop offset="0.72" stop-color="#f2f8ff"/>
+    <stop offset="1" stop-color="#66748a"/>
   </linearGradient>
   <linearGradient id="panel" x1="0" y1="0" x2="0" y2="1">
-    <stop offset="0" stop-color="#1e242e"/>
-    <stop offset="1" stop-color="#151a22"/>
+    <stop offset="0" stop-color="#1b2431"/>
+    <stop offset="0.5" stop-color="#151d28"/>
+    <stop offset="1" stop-color="#111820"/>
   </linearGradient>
   <linearGradient id="panelLive" x1="0" y1="0" x2="0" y2="1">
-    <stop offset="0" stop-color="#28303c"/>
-    <stop offset="1" stop-color="#1b212a"/>
+    <stop offset="0" stop-color="#26323f"/>
+    <stop offset="1" stop-color="#161e28"/>
+  </linearGradient>
+  <linearGradient id="edge" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0" stop-color="#3d4d61" stop-opacity="0.2"/>
+    <stop offset="0.5" stop-color="#8fa3ba" stop-opacity="0.75"/>
+    <stop offset="1" stop-color="#3d4d61" stop-opacity="0.2"/>
+  </linearGradient>
+  <linearGradient id="spine" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#7fd4ff" stop-opacity="0"/>
+    <stop offset="0.12" stop-color="#7fd4ff" stop-opacity="0.55"/>
+    <stop offset="0.88" stop-color="#7fd4ff" stop-opacity="0.55"/>
+    <stop offset="1" stop-color="#7fd4ff" stop-opacity="0"/>
   </linearGradient>
   <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
-    <path d="M0,0 L10,5 L0,10 z" fill="#aab6c6"/>
+    <path d="M0,0 L10,5 L0,10 z" fill="#8fa3ba"/>
   </marker>
   <marker id="ab" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
-    <path d="M0,0 L10,5 L0,10 z" fill="#e6edf5"/>
+    <path d="M0,0 L10,5 L0,10 z" fill="#eaf2fa"/>
   </marker>
 </defs>
 
-<rect x="0" y="0" width="980" height="1200" rx="12" fill="url(#bg)"/>
+<rect x="0" y="0" width="980" height="1240" rx="14" fill="url(#bg)"/>
+<rect x="0" y="0" width="980" height="1240" rx="14" fill="url(#grid)"/>
 
-<text x="34" y="58" fill="#f2f6fa" font-size="32" font-weight="700">Architecture</text>
-<text x="34" y="90" fill="#93a1b3" font-size="19">One control loop, top to bottom. The bright band is the part that watches.</text>
-<text x="946" y="58" fill="#8f9dae" font-size="17" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">5 obs dims / 5 actions</text>
-<text x="946" y="86" fill="#8f9dae" font-size="17" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">grid 20x20 / 200 steps</text>
+<rect x="34" y="150" width="2" height="1010" fill="url(#spine)"/>
 
-<line x1="34" y1="116" x2="946" y2="116" stroke="#2b333f" stroke-width="1"/>
+<text x="34" y="46" fill="#7fd4ff" font-size="15" font-weight="700" letter-spacing="3.4" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">SYSTEM MAP</text>
+<text x="34" y="88" fill="#f4f8fc" font-size="34" font-weight="700" letter-spacing="0.4">Architecture</text>
+<text x="34" y="118" fill="#8ea0b5" font-size="19">One control loop, top to bottom. The bright band is the part that watches.</text>
+<rect x="700" y="30" width="2" height="62" fill="#2b3949"/>
+<text x="946" y="52" fill="#93a6bb" font-size="17" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">5 obs dims / 5 actions</text>
+<text x="946" y="78" fill="#93a6bb" font-size="17" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">grid 20x20 / 200 steps</text>
 
-<text x="34" y="154" fill="#7e8b9c" font-size="17" font-weight="700" letter-spacing="1.8">CONFIG</text>
-<text x="170" y="154" fill="#6f7c8d" font-size="18">the only file the code actually reads</text>
-<rect x="34" y="172" width="440" height="88" rx="9" fill="url(#panel)" stroke="#46515f" stroke-width="1.8"/>
-<text x="56" y="208" fill="#e9eff6" font-size="22" font-weight="700">configs/env.yaml</text>
-<text x="56" y="240" fill="#9dabbc" font-size="19">grid_size 20, max_steps 200</text>
+<text x="62" y="170" fill="#7fd4ff" font-size="16" font-weight="700" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">01</text>
+<text x="96" y="170" fill="#c6d3e2" font-size="17" font-weight="700" letter-spacing="2.2">CONFIG</text>
+<text x="216" y="170" fill="#6d7d90" font-size="18">the only file the code actually reads</text>
+<line x1="62" y1="184" x2="946" y2="184" stroke="#1e2a37" stroke-width="1"/>
 
-<line x1="34" y1="292" x2="946" y2="292" stroke="#2b333f" stroke-width="1"/>
+<rect x="62" y="200" width="440" height="88" rx="6" fill="url(#panel)" stroke="#3a4859" stroke-width="1.5"/>
+<rect x="74" y="200.7" width="416" height="1.4" fill="url(#edge)"/>
+<text x="84" y="236" fill="#eef4fa" font-size="22" font-weight="700">configs/env.yaml</text>
+<text x="84" y="268" fill="#9fb0c3" font-size="19" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">grid_size 20, max_steps 200</text>
 
-<text x="34" y="330" fill="#7e8b9c" font-size="17" font-weight="700" letter-spacing="1.8">ENVIRONMENT</text>
-<text x="220" y="330" fill="#6f7c8d" font-size="18">DroneEnv, a gymnasium grid world</text>
+<text x="62" y="342" fill="#7fd4ff" font-size="16" font-weight="700" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">02</text>
+<text x="96" y="342" fill="#c6d3e2" font-size="17" font-weight="700" letter-spacing="2.2">ENVIRONMENT</text>
+<text x="280" y="342" fill="#6d7d90" font-size="18">DroneEnv, a gymnasium grid world</text>
+<line x1="62" y1="356" x2="946" y2="356" stroke="#1e2a37" stroke-width="1"/>
 
-<rect x="34" y="348" width="440" height="152" rx="9" fill="url(#panel)" stroke="#46515f" stroke-width="1.8"/>
-<text x="56" y="384" fill="#e9eff6" font-size="22" font-weight="700">reset() and step(action)</text>
-<text x="56" y="418" fill="#9dabbc" font-size="19">returns obs, reward, terminated,</text>
-<text x="56" y="446" fill="#9dabbc" font-size="19">truncated, info</text>
-<text x="56" y="480" fill="#8f9dae" font-size="17" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">+10 at goal, -1 per step</text>
+<rect x="62" y="372" width="420" height="152" rx="6" fill="url(#panel)" stroke="#3a4859" stroke-width="1.5"/>
+<rect x="74" y="372.7" width="396" height="1.4" fill="url(#edge)"/>
+<text x="84" y="408" fill="#eef4fa" font-size="22" font-weight="700">reset() and step(action)</text>
+<text x="84" y="442" fill="#9fb0c3" font-size="19">returns obs, reward, terminated,</text>
+<text x="84" y="470" fill="#9fb0c3" font-size="19">truncated, info</text>
+<text x="84" y="504" fill="#7f92a8" font-size="17" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">+10 at goal, -1 per step</text>
 
-<rect x="506" y="348" width="440" height="152" rx="9" fill="url(#panel)" stroke="#46515f" stroke-width="1.8"/>
-<text x="528" y="384" fill="#e9eff6" font-size="22" font-weight="700">spaces</text>
-<text x="528" y="418" fill="#9dabbc" font-size="19">observation Box(5): x, y, goal x,</text>
-<text x="528" y="446" fill="#9dabbc" font-size="19">goal y, steps remaining</text>
-<text x="528" y="480" fill="#9dabbc" font-size="19">action Discrete(5), edge clamped</text>
+<rect x="526" y="372" width="420" height="152" rx="6" fill="url(#panel)" stroke="#3a4859" stroke-width="1.5"/>
+<rect x="538" y="372.7" width="396" height="1.4" fill="url(#edge)"/>
+<text x="548" y="408" fill="#eef4fa" font-size="22" font-weight="700">spaces</text>
+<text x="548" y="442" fill="#9fb0c3" font-size="19">observation Box(5): x, y, goal x,</text>
+<text x="548" y="470" fill="#9fb0c3" font-size="19">goal y, steps remaining</text>
+<text x="548" y="504" fill="#9fb0c3" font-size="19">action Discrete(5), edge clamped</text>
 
-<path d="M 474 424 L 500 424" stroke="#aab6c6" stroke-width="2" fill="none" marker-end="url(#a)"/>
+<path d="M 482 448 L 518 448" stroke="#8fa3ba" stroke-width="2" fill="none" marker-end="url(#a)"/>
 
-<line x1="34" y1="532" x2="946" y2="532" stroke="#2b333f" stroke-width="1"/>
+<text x="62" y="578" fill="#7fd4ff" font-size="16" font-weight="700" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">03</text>
+<text x="96" y="578" fill="#c6d3e2" font-size="17" font-weight="700" letter-spacing="2.2">AGENT</text>
+<text x="200" y="578" fill="#6d7d90" font-size="18">PPOAgent, actor and critic on one trunk</text>
+<line x1="62" y1="592" x2="946" y2="592" stroke="#1e2a37" stroke-width="1"/>
 
-<text x="34" y="570" fill="#7e8b9c" font-size="17" font-weight="700" letter-spacing="1.8">AGENT</text>
-<text x="150" y="570" fill="#6f7c8d" font-size="18">PPOAgent, actor and critic on one trunk</text>
+<rect x="62" y="608" width="420" height="152" rx="6" fill="url(#panel)" stroke="#3a4859" stroke-width="1.5"/>
+<rect x="74" y="608.7" width="396" height="1.4" fill="url(#edge)"/>
+<text x="84" y="644" fill="#eef4fa" font-size="22" font-weight="700">PPOPolicy</text>
+<text x="84" y="678" fill="#9fb0c3" font-size="19">shared Linear(5, 64) + ReLU</text>
+<text x="84" y="706" fill="#9fb0c3" font-size="19">policy head (5), value head (1)</text>
+<text x="84" y="740" fill="#7f92a8" font-size="17" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">sample training, argmax serving</text>
 
-<rect x="34" y="588" width="440" height="152" rx="9" fill="url(#panel)" stroke="#46515f" stroke-width="1.8"/>
-<text x="56" y="624" fill="#e9eff6" font-size="22" font-weight="700">PPOPolicy</text>
-<text x="56" y="658" fill="#9dabbc" font-size="19">shared Linear(5, 64) + ReLU</text>
-<text x="56" y="686" fill="#9dabbc" font-size="19">policy head (5), value head (1)</text>
-<text x="56" y="720" fill="#8f9dae" font-size="17" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">sample training, argmax serving</text>
+<rect x="526" y="608" width="420" height="152" rx="6" fill="url(#panel)" stroke="#3a4859" stroke-width="1.5"/>
+<rect x="538" y="608.7" width="396" height="1.4" fill="url(#edge)"/>
+<text x="548" y="644" fill="#eef4fa" font-size="22" font-weight="700">clipped surrogate update</text>
+<text x="548" y="678" fill="#9fb0c3" font-size="19">policy, value and entropy terms</text>
+<text x="548" y="712" fill="#7f92a8" font-size="17" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">eps_clip 0.2, gamma 0.99</text>
+<text x="548" y="740" fill="#7f92a8" font-size="17" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">Adam lr 3e-4, 3 epochs</text>
 
-<rect x="506" y="588" width="440" height="152" rx="9" fill="url(#panel)" stroke="#46515f" stroke-width="1.8"/>
-<text x="528" y="624" fill="#e9eff6" font-size="22" font-weight="700">clipped surrogate update</text>
-<text x="528" y="658" fill="#9dabbc" font-size="19">policy, value and entropy terms</text>
-<text x="528" y="692" fill="#8f9dae" font-size="17" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">eps_clip 0.2, gamma 0.99</text>
-<text x="528" y="720" fill="#8f9dae" font-size="17" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">Adam lr 3e-4, 3 epochs</text>
+<path d="M 482 684 L 518 684" stroke="#8fa3ba" stroke-width="2" fill="none" marker-end="url(#a)"/>
 
-<path d="M 474 664 L 500 664" stroke="#aab6c6" stroke-width="2" fill="none" marker-end="url(#a)"/>
+<text x="62" y="814" fill="#eaf2fa" font-size="16" font-weight="700" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">04</text>
+<text x="96" y="814" fill="#ffffff" font-size="17" font-weight="700" letter-spacing="2.2">VALIDATORS</text>
+<text x="262" y="814" fill="#a9bbcd" font-size="18">every step answers both questions; the subject of this repository</text>
+<line x1="62" y1="828" x2="946" y2="828" stroke="#42566b" stroke-width="1"/>
 
-<line x1="34" y1="772" x2="946" y2="772" stroke="#2b333f" stroke-width="1"/>
+<rect x="62" y="844" width="420" height="146" rx="6" fill="url(#panelLive)" stroke="url(#chrome)" stroke-width="2.2"/>
+<path d="M 74 858 L 74 846 L 86 846" stroke="#7fd4ff" stroke-width="2" fill="none"/>
+<path d="M 470 976 L 470 988 L 458 988" stroke="#7fd4ff" stroke-width="2" fill="none"/>
+<text x="84" y="882" fill="#ffffff" font-size="22" font-weight="700">IntegrityValidator</text>
+<text x="84" y="916" fill="#ccd9e7" font-size="19">observation inside its space?</text>
+<text x="84" y="944" fill="#ccd9e7" font-size="19">action legal? reward finite?</text>
+<text x="84" y="972" fill="#8ba0b6" font-size="17">on the environment side</text>
 
-<text x="34" y="810" fill="#e6edf5" font-size="17" font-weight="700" letter-spacing="1.8">VALIDATORS</text>
-<text x="200" y="810" fill="#aab6c6" font-size="18">every step answers both questions; the subject of this repository</text>
+<rect x="526" y="844" width="420" height="146" rx="6" fill="url(#panelLive)" stroke="url(#chrome)" stroke-width="2.2"/>
+<path d="M 538 858 L 538 846 L 550 846" stroke="#7fd4ff" stroke-width="2" fill="none"/>
+<path d="M 934 976 L 934 988 L 922 988" stroke="#7fd4ff" stroke-width="2" fill="none"/>
+<text x="548" y="882" fill="#ffffff" font-size="22" font-weight="700">PolicyIntegrityValidator</text>
+<text x="548" y="916" fill="#ccd9e7" font-size="19">probabilities sum to 1?</text>
+<text x="548" y="944" fill="#ccd9e7" font-size="19">value finite? action in space?</text>
+<text x="548" y="972" fill="#8ba0b6" font-size="17">on the agent side</text>
 
-<rect x="34" y="828" width="440" height="140" rx="9" fill="url(#panelLive)" stroke="url(#chrome)" stroke-width="2.6"/>
-<text x="56" y="864" fill="#ffffff" font-size="22" font-weight="700">IntegrityValidator</text>
-<text x="56" y="898" fill="#c3cedd" font-size="19">observation inside its space?</text>
-<text x="56" y="926" fill="#c3cedd" font-size="19">action legal? reward finite?</text>
-<text x="56" y="952" fill="#8f9dae" font-size="17">on the environment side</text>
+<path d="M 482 910 L 518 910" stroke="#eaf2fa" stroke-width="2.2" fill="none" marker-end="url(#ab)"/>
 
-<rect x="506" y="828" width="440" height="140" rx="9" fill="url(#panelLive)" stroke="url(#chrome)" stroke-width="2.6"/>
-<text x="528" y="864" fill="#ffffff" font-size="22" font-weight="700">PolicyIntegrityValidator</text>
-<text x="528" y="898" fill="#c3cedd" font-size="19">probabilities sum to 1?</text>
-<text x="528" y="926" fill="#c3cedd" font-size="19">value finite? action in space?</text>
-<text x="528" y="952" fill="#8f9dae" font-size="17">on the agent side</text>
+<rect x="62" y="1010" width="884" height="86" rx="6" fill="url(#panelLive)" stroke="url(#chrome)" stroke-width="2.2"/>
+<text x="84" y="1046" fill="#ffffff" font-size="22" font-weight="700">IntegrityStats</text>
+<text x="84" y="1078" fill="#ccd9e7" font-size="19">drift against hallucination, reported as a rate per step, never as a bare count</text>
 
-<path d="M 474 890 L 500 890" stroke="#e6edf5" stroke-width="2.2" fill="none" marker-end="url(#ab)"/>
+<text x="62" y="1150" fill="#7fd4ff" font-size="16" font-weight="700" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">05</text>
+<text x="96" y="1150" fill="#c6d3e2" font-size="17" font-weight="700" letter-spacing="2.2">SERVING</text>
+<text x="222" y="1150" fill="#6d7d90" font-size="18">validators report, but never halt a run</text>
+<line x1="62" y1="1164" x2="946" y2="1164" stroke="#1e2a37" stroke-width="1"/>
 
-<rect x="34" y="988" width="912" height="88" rx="9" fill="url(#panelLive)" stroke="url(#chrome)" stroke-width="2.6"/>
-<text x="56" y="1024" fill="#ffffff" font-size="22" font-weight="700">IntegrityStats</text>
-<text x="56" y="1056" fill="#c3cedd" font-size="19">drift against hallucination, reported as a rate per step, never as a bare count</text>
-
-<line x1="34" y1="1108" x2="946" y2="1108" stroke="#2b333f" stroke-width="1"/>
-
-<text x="34" y="1146" fill="#7e8b9c" font-size="17" font-weight="700" letter-spacing="1.8">SERVING</text>
-<text x="168" y="1146" fill="#6f7c8d" font-size="18">validators report, but never halt a run</text>
-<rect x="34" y="1160" width="440" height="26" rx="6" fill="url(#panel)" stroke="#46515f" stroke-width="1.6"/>
-<text x="56" y="1179" fill="#9dabbc" font-size="17" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">FastAPI /predict /metrics /healthz</text>
-<rect x="506" y="1160" width="440" height="26" rx="6" fill="url(#panel)" stroke="#46515f" stroke-width="1.6"/>
-<text x="528" y="1179" fill="#9dabbc" font-size="17">Prometheus and Grafana scrape /metrics</text>
+<rect x="62" y="1180" width="420" height="34" rx="5" fill="url(#panel)" stroke="#3a4859" stroke-width="1.4"/>
+<text x="84" y="1203" fill="#9fb0c3" font-size="17" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">FastAPI /predict /metrics /healthz</text>
+<rect x="526" y="1180" width="420" height="34" rx="5" fill="url(#panel)" stroke="#3a4859" stroke-width="1.4"/>
+<text x="548" y="1203" fill="#9fb0c3" font-size="18">Prometheus and Grafana scrape /metrics</text>
 </svg>
