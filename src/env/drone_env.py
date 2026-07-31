@@ -17,18 +17,29 @@ except Exception:  # pragma: no cover
 from integrity_validators import IntegrityValidator
 from safety_controller import SafetyController
 
-# Observation values per drone, before the four sensor flags.
+# Observation values per drone.
+#
+# The two flag groups are deliberately separate. A wall is permanent and knowable
+# alone, so it is safe to remove that move from the policy's choices outright. A
+# neighbouring drone is neither: it may move away next step, and masking against
+# it manufactures deadlock, since two drones facing each other would each have
+# their only useful move removed and neither could ever yield. Worse, a drone
+# parked on its goal would become a permanent wall for every other drone. So peer
+# occupancy is reported as information the policy can weigh, never as a
+# constraint it cannot violate.
 _BASE_FEATURES = 5
-_SENSOR_FLAGS = 4
+_STATIC_FLAGS = 4       # wall or obstacle: masked
+_PEER_FLAGS = 4         # another drone right now: observed only
+_SENSOR_FLAGS = _STATIC_FLAGS + _PEER_FLAGS
 _FEATURES_PER_DRONE = _BASE_FEATURES + _SENSOR_FLAGS
 
 
 class DroneEnv(gym.Env):
     """Grid world holding one or more drones.
 
-    Every drone is described by the same nine features, so the observation is
-    ``(num_drones, 9)`` and the action is one discrete move per drone. A single
-    drone is simply the degenerate case of the same shape.
+    Every drone is described by the same thirteen features, so the observation
+    is ``(num_drones, 13)`` and the action is one discrete move per drone. A
+    single drone is simply the degenerate case of the same shape.
 
     Parameters
     ----------
@@ -49,6 +60,14 @@ class DroneEnv(gym.Env):
         # reward a run reports, and a number that silently means something else
         # is worse than a hard task.
         self.reward_shaping: bool = bool(self.config.get("reward_shaping", False))
+
+        # Reward terms. Named and configurable because their relative sizes are
+        # the whole design: the completion bonus has to outweigh what a policy
+        # could earn by stranding a drone, or stranding one becomes optimal.
+        self.step_penalty: float = float(self.config.get("step_penalty", 1.0))
+        self.collision_penalty: float = float(self.config.get("collision_penalty", 2.0))
+        self.arrival_bonus: float = float(self.config.get("arrival_bonus", 10.0))
+        self.completion_bonus: float = float(self.config.get("completion_bonus", 50.0))
         # A fixed layout makes the task stationary: the same starts and goals
         # every episode. Random placement re-poses the problem on every reset,
         # which is a much harder thing to learn and hides whether the learner
@@ -57,7 +76,8 @@ class DroneEnv(gym.Env):
         self.shaping_gamma: float = float(self.config.get("shaping_gamma", 0.99))
 
         # Per drone: [x, y, goal_x, goal_y, steps_remaining,
-        #             blocked_up, blocked_down, blocked_left, blocked_right]
+        #             blocked_up, blocked_down, blocked_left, blocked_right,
+        #             peer_up, peer_down, peer_left, peer_right]
         # Bounds are per-dimension. The coordinates are clamped to the grid while
         # steps_remaining counts down from max_steps, so one scalar bound cannot
         # describe both. The trailing flags are local sensing: without them a
@@ -69,10 +89,8 @@ class DroneEnv(gym.Env):
                 self.grid_size - 1,
                 self.grid_size - 1,
                 self.max_steps,
-                1.0,
-                1.0,
-                1.0,
-                1.0,
+                1.0, 1.0, 1.0, 1.0,   # blocked_up/down/left/right
+                1.0, 1.0, 1.0, 1.0,   # peer_up/down/left/right
             ],
             dtype=np.float32,
         )
@@ -92,6 +110,9 @@ class DroneEnv(gym.Env):
         self.safety = SafetyController(self.grid_size, self.config.get("safety"))
 
         self.positions = np.zeros((self.num_drones, 2), dtype=np.float32)
+        # Which drones have ever reached their goal this episode, so the arrival
+        # bonus pays once rather than every step the drone sits there.
+        self._reached = np.zeros(self.num_drones, dtype=bool)
         self.goals = np.zeros((self.num_drones, 2), dtype=np.float32)
         self.steps = 0
         self.obstacles = np.zeros((self.grid_size, self.grid_size), dtype=bool)
@@ -179,19 +200,29 @@ class DroneEnv(gym.Env):
         return bool(self.obstacles[x, y])
 
     def _is_impassable(self, x: int, y: int, occupied: set) -> bool:
-        """What a drone's sensor reports: wall, obstacle and neighbour all read alike."""
+        """Whether a cell can never be entered: off the grid, or an obstacle.
+
+        A cell holding another drone is NOT impassable. It is occupied right now
+        and may be free next step, and treating the two alike is what turned the
+        action mask into a deadlock generator.
+        """
         if not (0 <= x < self.grid_size and 0 <= y < self.grid_size):
             return True
-        if self.obstacles[x, y]:
-            return True
-        return (x, y) in occupied
+        return bool(self.obstacles[x, y])
 
     def _sensor_flags(self, index: int, occupied: set) -> list:
-        """Blocked flags for one drone, in action order: up, down, left, right."""
+        """Eight flags for one drone, each group in action order: up, down, left, right.
+
+        The first four are static impassability and drive the action mask. The
+        last four say a neighbour is there at this instant, which the policy can
+        act on but is never forced to obey.
+        """
         x, y = int(self.positions[index][0]), int(self.positions[index][1])
         others = occupied - {(x, y)}
         neighbours = [(x, y + 1), (x, y - 1), (x - 1, y), (x + 1, y)]
-        return [1.0 if self._is_impassable(nx, ny, others) else 0.0 for nx, ny in neighbours]
+        static = [1.0 if self._is_impassable(nx, ny, others) else 0.0 for nx, ny in neighbours]
+        peers = [1.0 if (nx, ny) in others else 0.0 for nx, ny in neighbours]
+        return static + peers
 
     def _get_obs(self) -> np.ndarray:
         steps_remaining = self.max_steps - self.steps
@@ -239,6 +270,7 @@ class DroneEnv(gym.Env):
         self.obstacles = self._generate_obstacles()
         self._place()
         self.steps = 0
+        self._reached = np.zeros(self.num_drones, dtype=bool)
         return self._get_obs(), {}
 
     def step(self, action) -> Tuple[np.ndarray, float, bool, bool, Dict[str, Any]]:
@@ -306,7 +338,22 @@ class DroneEnv(gym.Env):
         self.positions = np.array(intended, dtype=np.float32)
 
         at_goal = np.all(self.positions == self.goals, axis=1)
-        rewards = np.where(at_goal, 10.0, np.where(collided, -2.0, -1.0))
+
+        # A drone standing on its goal earns nothing further. Paying it every
+        # step made camping an income stream, and because the episode ends only
+        # when everyone arrives, finishing the task switched that income off.
+        # Measured on the four-drone profile: bringing three drones home scored
+        # +500 while bringing all four home scored -40, so the optimal policy
+        # under the old reward was to strand one drone deliberately. The agent
+        # was not failing to learn that; it was learning it correctly.
+        rewards = np.where(collided, -self.collision_penalty, -self.step_penalty)
+        rewards = np.where(at_goal, 0.0, rewards)
+
+        # Arrival pays once, on the step a drone first reaches its goal. Leaving
+        # and returning does not pay again, which would be a second income loop.
+        newly_home = at_goal & ~self._reached
+        rewards = rewards + newly_home * self.arrival_bonus
+        self._reached = self._reached | at_goal
 
         if self.reward_shaping:
             # F = gamma * phi(s') - phi(s). Ng, Harada and Russell (1999) show
@@ -318,13 +365,26 @@ class DroneEnv(gym.Env):
             after = self._potential(self.positions)
             rewards = rewards + self.shaping_gamma * after - before
 
+        terminated = bool(at_goal.all())
+
+        # The completion bonus is what makes solving the task beat solving most
+        # of it. It is paid to every drone, because arriving is a team outcome:
+        # a drone that yields a corridor so another can pass has contributed to
+        # it, and a purely per-drone bonus would not price that contribution.
+        if terminated:
+            rewards = rewards + self.completion_bonus
+
         reward = float(rewards.sum())
 
-        terminated = bool(at_goal.all())
+        # Per-drone rewards alongside the scalar. The scalar is what the gym API
+        # requires, but training on it alone gives every drone the same signal:
+        # one that flew a clean route and one that drove into a wall are told the
+        # same thing. Credit assignment needs the vector.
+        per_drone = [float(r) for r in rewards]
         truncated = bool(self.steps >= self.max_steps)
 
         obs = self._get_obs()
-        info: Dict[str, Any] = {"at_goal": int(at_goal.sum())}
+        info: Dict[str, Any] = {"at_goal": int(at_goal.sum()), "rewards": per_drone}
         if any(collided):
             info["collisions"] = int(sum(collided))
         if veto_reasons:

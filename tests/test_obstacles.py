@@ -35,9 +35,10 @@ def solo(tmp_path):
         e.close()
 
 
-def test_observation_is_one_row_of_nine_per_drone(env):
+def test_observation_is_one_row_of_thirteen_per_drone(env):
     obs, _ = env.reset(seed=0)
-    assert obs.shape == (env.num_drones, 9)
+    # Five state values, four static blocked flags, four peer flags.
+    assert obs.shape == (env.num_drones, 13)
     assert env.observation_space.contains(obs)
 
 

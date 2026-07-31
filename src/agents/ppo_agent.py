@@ -95,8 +95,18 @@ class PPOAgent:
         # policy weights are shared across drones: a single trunk is applied to
         # every row, so the network size does not grow with the fleet and a
         # lesson learned by one drone is available to all of them.
-        obs_dim = int(env.observation_space.shape[-1])
+        raw_dim = int(env.observation_space.shape[-1])
         act_dim = int(env.action_space.nvec[0]) if hasattr(env.action_space, "nvec") else int(env.action_space.n)
+
+        # Scales for the input transform below. Read from the environment rather
+        # than hard-coded so a different grid does not silently change what the
+        # network sees.
+        self._grid = float(getattr(env, "grid_size", 1) or 1)
+        self._horizon = float(getattr(env, "max_steps", 1) or 1)
+
+        # Two extra inputs: the offset from the drone to its own goal. See
+        # _features for why that is worth more than it looks.
+        obs_dim = raw_dim + 2
 
         # Initialize policy network and optimizer
         self.policy = PPOPolicy(obs_dim, act_dim)
@@ -104,6 +114,50 @@ class PPOAgent:
 
         # Attach validator for drift/hallucination checks
         self.validator = PolicyIntegrityValidator(env.action_space)
+
+    def _features(self, state):
+        """Turn a raw observation into what the network actually consumes.
+
+        Two changes, both about making the task easier to represent rather than
+        easier to solve.
+
+        The offset from a drone to its goal is supplied directly. The raw
+        observation gives absolute position and absolute goal, so a policy has to
+        learn subtraction before it can learn navigation, and it has to learn it
+        separately for every region of the grid. Handing over the difference
+        makes the policy translation invariant: "goal is three cells north" means
+        the same thing everywhere on the board, so an episode spent in one corner
+        teaches something usable in the other.
+
+        Everything is then scaled to roughly the unit interval. Raw inputs mixed
+        coordinates in 0 to 7 with a step counter in 0 to 40 and flags in 0 to 1,
+        so the first layer was dominated by whichever number happened to be
+        largest, and the step counter drowned out the sensors.
+        """
+        arr = np.atleast_2d(np.asarray(state, dtype=np.float32))
+        x, y = arr[..., 0], arr[..., 1]
+        gx, gy = arr[..., 2], arr[..., 3]
+        steps = arr[..., 4]
+        flags = arr[..., 5:]
+
+        out = np.concatenate(
+            [
+                np.stack([
+                    x / self._grid,
+                    y / self._grid,
+                    gx / self._grid,
+                    gy / self._grid,
+                    (gx - x) / self._grid,   # offset to goal, the useful part
+                    (gy - y) / self._grid,
+                    steps / self._horizon,
+                ], axis=-1),
+                flags,                        # already 0 or 1
+            ],
+            axis=-1,
+        )
+        return torch.as_tensor(out, dtype=torch.float32).reshape(
+            *np.asarray(state).shape[:-1], out.shape[-1]
+        )
 
     def _mask_probs(self, state, probs):
         """Zero out moves the observation already reports as blocked.
@@ -137,9 +191,9 @@ class PPOAgent:
         Pick an action from the current policy.
         -> During training, we sample from the distribution (exploration).
         """
-        state = torch.tensor(np.asarray(state), dtype=torch.float32)
-        probs, value = self.policy(state)
-        probs = self._mask_probs(state, probs)
+        raw = np.asarray(state, dtype=np.float32)
+        probs, value = self.policy(self._features(raw))
+        probs = self._mask_probs(raw, probs)
         # Check before Categorical is constructed. Categorical validates the
         # simplex itself and raises on a nan, which would pre-empt the validator
         # and surface a torch constraint error instead of the drift report this
@@ -148,24 +202,33 @@ class PPOAgent:
         m = Categorical(probs)
         action = m.sample()
 
-        # Integrity check. One log probability per drone, summed, because the
-        # fleet's move is the joint event and PPO's ratio is over that.
         actions = action.detach().numpy()
         errors = self.validator.validate(probs, value.mean(), actions)
         if errors:
             for e in errors:
                 print(f"[Integrity Warning] {e['type']} on {e['field']}: {e['msg']}")
 
-        return actions, m.log_prob(action).sum()
+        # One log probability PER DRONE, not summed. Summing made the fleet's
+        # move a single joint event, so all drones shared one advantage and the
+        # drone that flew a clean route was told exactly what the drone that
+        # drove into a wall was told. Keeping them separate is what lets credit
+        # land on whichever drone earned it. For one drone this is unchanged.
+        return actions, m.log_prob(action)
 
     def train(self, num_episodes=100):
         """
         Train the PPO agent for a number of episodes.
 
-        Training loop:
-        - Run one episode, collecting (state, action, reward).
-        - Compute discounted returns.
-        - Update policy using clipped surrogate objective.
+        Every quantity below is per drone, shape ``(timesteps, num_drones)``,
+        rather than one number per timestep. That distinction is the difference
+        between a fleet that coordinates and one that cannot: with a single
+        shared advantage, a drone is credited for outcomes it had no part in and
+        blamed for failures it did not cause, so its gradient is mostly other
+        drones' noise. A single drone is the degenerate case and is unaffected.
+
+        The policy itself is shared across drones. Each drone sees only its own
+        observation row and contributes its own transitions, which is parameter
+        sharing with independent credit.
         """
         for ep in range(num_episodes):
             state, _ = self.env.reset()
@@ -175,22 +238,30 @@ class PPOAgent:
             # Rollout one episode
             while not (terminated or truncated):
                 action, log_prob = self.select_action(state)
-                next_state, reward, terminated, truncated, _ = self.env.step(action)
+                next_state, reward, terminated, truncated, info = self.env.step(action)
+
+                per_drone = info.get("rewards")
+                if per_drone is None:
+                    # An environment that reports only a team scalar cannot say
+                    # who earned what, so the best available split is an even
+                    # one. Credit assignment is lost here, not silently faked.
+                    n = int(np.atleast_1d(np.asarray(action)).size)
+                    per_drone = [float(reward) / n] * n
 
                 states.append(state)
                 actions.append(action)
-                rewards.append(reward)
+                rewards.append(per_drone)
                 log_probs.append(log_prob)
 
                 state = next_state
 
-            # Compute discounted returns
-            discounted = []
-            R = 0
-            for r in reversed(rewards):
-                R = r + self.gamma * R
-                discounted.insert(0, R)
-            discounted = torch.tensor(discounted, dtype=torch.float32)
+            # Discounted returns, computed down each drone's own timeline.
+            rewards_t = torch.tensor(np.array(rewards), dtype=torch.float32)
+            discounted = torch.zeros_like(rewards_t)
+            running = torch.zeros(rewards_t.shape[1])
+            for t in reversed(range(rewards_t.shape[0])):
+                running = rewards_t[t] + self.gamma * running
+                discounted[t] = running
 
             # Normalize returns -> improves training stability.
             # Only when there are at least two samples. The unbiased std of a
@@ -205,25 +276,26 @@ class PPOAgent:
 
             # Policy update for several epochs
             for _ in range(self.epochs):
-                states_t = torch.tensor(np.array(states), dtype=torch.float32)
+                states_np = np.array(states, dtype=np.float32)
                 actions_t = torch.tensor(np.array(actions), dtype=torch.long)
                 old_log_probs = torch.stack(log_probs)
 
                 # Forward pass
-                probs, values = self.policy(states_t)
+                probs, values = self.policy(self._features(states_np))
                 # The same mask must be applied here. Sampling from a masked
                 # distribution and then scoring those actions against an
                 # unmasked one makes the PPO ratio compare two different
                 # distributions, which silently corrupts every update.
-                probs = self._mask_probs(states_t.numpy(), probs)
+                probs = self._mask_probs(states_np, probs)
                 m = Categorical(probs)
-                # Sum across drones so each timestep has one joint log probability.
-                new_log_probs = m.log_prob(actions_t).sum(dim=-1)
+                new_log_probs = m.log_prob(actions_t)
                 entropy = m.entropy().mean()  # encourages exploration
 
-                # One scalar baseline per timestep: the fleet's reward is a team
-                # total, so the critic is averaged over drones to match it.
-                state_values = values.squeeze(-1).mean(dim=-1)
+                # One baseline per drone. Averaging the critic across drones
+                # gave every drone the fleet's expected value, so a drone in a
+                # good position and one in a hopeless corner shared a baseline
+                # and neither advantage meant anything local.
+                state_values = values.squeeze(-1)
 
                 # Advantage = return - baseline, detached.
                 # Without the detach the policy loss back-propagates through the
@@ -251,7 +323,7 @@ class PPOAgent:
                 loss.backward()
                 self.optimizer.step()
 
-            episode_reward = sum(rewards)
+            episode_reward = float(rewards_t.sum())
             # Declared in utils/metrics.py and, until now, never written to, so
             # the Grafana training-reward panel had no series behind it.
             TRAINING_REWARD.observe(episode_reward)
@@ -270,9 +342,9 @@ class PPOAgent:
         Greedy action selection (for inference).
         -> Use after training when running in production.
         """
-        state = torch.tensor(np.asarray(state), dtype=torch.float32)
-        probs, value = self.policy(state)
-        probs = self._mask_probs(state, probs)
+        raw = np.asarray(state, dtype=np.float32)
+        probs, value = self.policy(self._features(raw))
+        probs = self._mask_probs(raw, probs)
         self._guard_probs(probs, value)
         action = torch.argmax(probs, dim=-1).detach().numpy()
 

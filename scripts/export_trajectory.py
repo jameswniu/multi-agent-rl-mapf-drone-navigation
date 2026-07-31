@@ -47,14 +47,14 @@ SCENARIOS = [
         "name": "One drone, 5x5",
         "config": "configs/demo.yaml",
         "episodes": 2000,
-        "blurb": "The profile this implementation solves.",
+        "blurb": "Solved by every seed, on the optimal four-move route.",
     },
     {
         "key": "fleet",
         "name": "Four drones, 8x8",
         "config": "configs/sim.yaml",
-        "episodes": 2000,
-        "blurb": "The profile it does not solve.",
+        "episodes": 8000,
+        "blurb": "Solved by every seed. It needs four times the episodes.",
     },
 ]
 
