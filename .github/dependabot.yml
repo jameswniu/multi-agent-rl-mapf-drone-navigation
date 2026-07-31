@@ -1,9 +1,0 @@
-# This config tells GitHub to automatically check for dependency updates
-# Weekly checks will open PRs if new versions are available
-
-version: 2
-updates:
-  - package-ecosystem: "pip"
-    directory: "/"
-    schedule:
-      interval: "weekly"
