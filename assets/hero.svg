@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 300" width="980" height="300" role="img" aria-label="Multi-agent RL MAPF drone navigation: a PPO agent that validates its own policy outputs, shown beside a grid world with a path from origin to goal under a validator scan frame" font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif">
+<defs>
+  <linearGradient id="hbg" x1="0" y1="0" x2="0.7" y2="1">
+    <stop offset="0" stop-color="#0e151e"/>
+    <stop offset="0.6" stop-color="#080c12"/>
+    <stop offset="1" stop-color="#04070a"/>
+  </linearGradient>
+  <pattern id="hgrid" width="26" height="26" patternUnits="userSpaceOnUse">
+    <circle cx="1" cy="1" r="0.7" fill="#16202c"/>
+  </pattern>
+  <linearGradient id="hchrome" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0" stop-color="#5d6b7d"/>
+    <stop offset="0.3" stop-color="#eaf2fa"/>
+    <stop offset="0.55" stop-color="#93a2b4"/>
+    <stop offset="0.8" stop-color="#f2f8ff"/>
+    <stop offset="1" stop-color="#66748a"/>
+  </linearGradient>
+  <linearGradient id="hrule" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0" stop-color="#7fd4ff" stop-opacity="0.9"/>
+    <stop offset="1" stop-color="#7fd4ff" stop-opacity="0"/>
+  </linearGradient>
+  <linearGradient id="chip" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#1b2431"/>
+    <stop offset="1" stop-color="#111820"/>
+  </linearGradient>
+</defs>
+
+<rect x="0" y="0" width="980" height="300" rx="14" fill="url(#hbg)"/>
+<rect x="0" y="0" width="980" height="300" rx="14" fill="url(#hgrid)"/>
+
+<text x="46" y="62" fill="#7fd4ff" font-size="15" font-weight="700" letter-spacing="3.6" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">REINFORCEMENT LEARNING / INTEGRITY</text>
+
+<text x="46" y="116" fill="#f4f8fc" font-size="40" font-weight="700" letter-spacing="0.3">Drone navigation that</text>
+<text x="46" y="162" fill="#f4f8fc" font-size="40" font-weight="700" letter-spacing="0.3">checks its own work</text>
+
+<rect x="46" y="182" width="150" height="2.5" fill="url(#hrule)"/>
+
+<text x="46" y="216" fill="#9fb0c3" font-size="19">A PPO agent on a grid world, wrapped in a validator layer that</text>
+<text x="46" y="242" fill="#9fb0c3" font-size="19">separates <tspan fill="#eaf2fa" font-weight="700">drift</tspan> from <tspan fill="#eaf2fa" font-weight="700">hallucination</tspan> on every single step.</text>
+
+<rect x="46" y="262" width="128" height="26" rx="5" fill="url(#chip)" stroke="#3a4859" stroke-width="1.2"/>
+<text x="110" y="280" fill="#9fb0c3" font-size="15" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">observe</text>
+<rect x="182" y="262" width="112" height="26" rx="5" fill="url(#chip)" stroke="#3a4859" stroke-width="1.2"/>
+<text x="238" y="280" fill="#9fb0c3" font-size="15" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">policy</text>
+<rect x="302" y="262" width="124" height="26" rx="5" fill="#1d2a36" stroke="url(#hchrome)" stroke-width="1.8"/>
+<text x="364" y="280" fill="#eaf2fa" font-size="15" text-anchor="middle" font-weight="700" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">validate</text>
+<rect x="434" y="262" width="92" height="26" rx="5" fill="url(#chip)" stroke="#3a4859" stroke-width="1.2"/>
+<text x="480" y="280" fill="#9fb0c3" font-size="15" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">act</text>
+
+<g transform="translate(646,44)">
+  <rect x="0" y="0" width="288" height="216" rx="8" fill="#0a1018" stroke="#2b3949" stroke-width="1.4"/>
+
+  <g stroke="#17222f" stroke-width="1">
+    <line x1="24" y1="24" x2="264" y2="24"/><line x1="24" y1="56" x2="264" y2="56"/>
+    <line x1="24" y1="88" x2="264" y2="88"/><line x1="24" y1="120" x2="264" y2="120"/>
+    <line x1="24" y1="152" x2="264" y2="152"/><line x1="24" y1="184" x2="264" y2="184"/>
+    <line x1="24" y1="24" x2="24" y2="184"/><line x1="64" y1="24" x2="64" y2="184"/>
+    <line x1="104" y1="24" x2="104" y2="184"/><line x1="144" y1="24" x2="144" y2="184"/>
+    <line x1="184" y1="24" x2="184" y2="184"/><line x1="224" y1="24" x2="224" y2="184"/>
+    <line x1="264" y1="24" x2="264" y2="184"/>
+  </g>
+
+  <path d="M 24 184 L 64 184 L 64 152 L 104 152 L 104 120 L 144 120 L 144 88 L 184 88 L 184 56 L 224 56 L 224 24 L 264 24"
+        stroke="#7fd4ff" stroke-width="2.6" fill="none" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/>
+
+  <circle cx="24" cy="184" r="6.5" fill="#eaf2fa"/>
+  <rect x="257" y="17" width="14" height="14" rx="3" fill="none" stroke="#eaf2fa" stroke-width="2.4"/>
+
+  <path d="M 12 26 L 12 12 L 26 12" stroke="#7fd4ff" stroke-width="2" fill="none"/>
+  <path d="M 276 190 L 276 204 L 262 204" stroke="#7fd4ff" stroke-width="2" fill="none"/>
+
+  <text x="144" y="208" fill="#6d7d90" font-size="14.5" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">origin to goal, 38 moves</text>
+</g>
+</svg>
