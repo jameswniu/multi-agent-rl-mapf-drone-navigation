@@ -260,7 +260,7 @@ scene.add(board);
 let S = null;            // active scenario
 let run = null;          // active checkpoint
 let ghostRun = null;     // its untrained counterpart
-let drones = [], trails = [], stems = [], ghosts = [];
+let drones = [], trails = [], stems = [], ghosts = [], blockers = [];
 let world = () => new THREE.Vector3();
 let LIFT = 1.05;
 let cursor = 0, playing = true;
@@ -283,7 +283,7 @@ function buildScene(sc) {
     if (o.material) o.material.dispose();
     scene.remove(o);
   });
-  drones = []; trails = []; stems = []; ghosts = [];
+  drones = []; trails = []; stems = []; ghosts = []; blockers = [];
 
   const N = sc.gridSize;
   const off = (N - 1) / 2;
@@ -317,29 +317,45 @@ function buildScene(sc) {
   // so they are drawn at different heights and in different materials: reading
   // them alike would hide the only decision this scene is about.
   const ceiling = sc.maxAltitude || 0;
-  const tallMat = new THREE.MeshStandardMaterial({ color: 0x232d27, roughness: 0.55, metalness: 0.5 });
-  const lowMat = new THREE.MeshStandardMaterial({ color: 0x2f4038, roughness: 0.5, metalness: 0.45 });
-  const tallEdge = new THREE.LineBasicMaterial({ color: 0x7c8a82 });
-  const lowEdge = new THREE.LineBasicMaterial({ color: 0x6faa85 });
+  // Blocks stay solid until something is actually hidden behind one, then only
+  // that block fades. Making everything permanently translucent was the obvious
+  // fix and the wrong one: a wall that always looks see-through stops reading as
+  // a barrier, which is the single thing this course is about, and the whole
+  // board turns to haze even when nothing is occluded. Fading on demand keeps
+  // the terrain legible and puts the transparency exactly where information is
+  // being lost. See updateOcclusion.
+  //
+  // Materials are cloned per block because each one fades independently.
+  const tallMat = new THREE.MeshStandardMaterial({
+    color: 0x2a352f, roughness: 0.55, metalness: 0.5, transparent: true, opacity: 1 });
+  const lowMat = new THREE.MeshStandardMaterial({
+    color: 0x354a3f, roughness: 0.5, metalness: 0.45, transparent: true, opacity: 1 });
+  const tallEdge = new THREE.LineBasicMaterial({ color: 0x8b9a92, transparent: true, opacity: 1 });
+  const lowEdge = new THREE.LineBasicMaterial({ color: 0x7fbe97, transparent: true, opacity: 1 });
   for (const cell of sc.obstacles) {
     const [x, y] = cell;
     const h = cell.length > 2 ? cell[2] : 2;         // older exports had no height
     const crossable = ceiling > 0 && h <= ceiling;
     const tall = crossable ? 0.5 : 1.5;
     const geo = new THREE.BoxGeometry(0.88, tall, 0.88);
-    const m = new THREE.Mesh(geo, crossable ? lowMat : tallMat);
+    const m = new THREE.Mesh(geo, (crossable ? lowMat : tallMat).clone());
     m.position.copy(world(x, y)).setY(tall / 2 - 0.11);
     board.add(m);
-    const e = new THREE.LineSegments(new THREE.EdgesGeometry(geo), crossable ? lowEdge : tallEdge);
+    const e = new THREE.LineSegments(new THREE.EdgesGeometry(geo),
+      (crossable ? lowEdge : tallEdge).clone());
     e.position.copy(m.position);
     board.add(e);
+    m.userData.edge = e;
+    m.userData.fade = 1;
+    blockers.push(m);
   }
 
   // Tunnels: floor a drone may cross only while landed. Drawn as an opening in
   // the wall with a lintel over it, because a bare floor tile beside a solid
   // block reads as a doorway a drone could fly through, which is the one thing
   // it cannot do.
-  const tunnelMat = new THREE.MeshStandardMaterial({ color: 0x3a4a42, roughness: 0.6, metalness: 0.4 });
+  const tunnelMat = new THREE.MeshStandardMaterial({
+    color: 0x3a4a42, roughness: 0.6, metalness: 0.4, transparent: true, opacity: 0.45 });
   for (const [tx, ty] of (sc.tunnels || [])) {
     const p = world(tx, ty);
     const lintel = new THREE.Mesh(new THREE.BoxGeometry(0.88, 0.62, 0.88), tunnelMat);
@@ -377,6 +393,7 @@ function buildScene(sc) {
       color: tint, roughness: 0.3, metalness: 0.45, flatShading: true,
       emissive: tint, emissiveIntensity: 0.28,
     }));
+    mesh.renderOrder = 2;   // drawn after the translucent terrain
     mesh.position.y = FLY;
     scene.add(mesh); drones.push(mesh);
 
@@ -395,6 +412,39 @@ function buildScene(sc) {
     const trail = new THREE.Line(new THREE.BufferGeometry(),
       new THREE.LineBasicMaterial({ color: tint, transparent: true, opacity: 0.75 }));
     scene.add(trail); trails.push(trail);
+  }
+}
+
+/* occlusion */
+const raycaster = new THREE.Raycaster();
+const _toDrone = new THREE.Vector3();
+
+function updateOcclusion(dt) {
+  if (!blockers.length) return;
+  for (const b of blockers) b.userData.want = 1;
+
+  // One ray per drone, from the eye toward it. Anything struck before reaching
+  // the drone is standing in the way, and only that gets faded.
+  for (const drone of drones) {
+    if (!drone.visible) continue;
+    _toDrone.subVectors(drone.position, camera.position);
+    const distance = _toDrone.length();
+    raycaster.set(camera.position, _toDrone.normalize());
+    raycaster.near = 0;
+    raycaster.far = Math.max(0, distance - 0.25);
+    for (const hit of raycaster.intersectObjects(blockers, false)) {
+      hit.object.userData.want = 0.18;
+    }
+  }
+
+  // Eased rather than switched, or a block flickers as a drone crosses its edge.
+  const k = Math.min(1, dt * 9);
+  for (const b of blockers) {
+    b.userData.fade += (b.userData.want - b.userData.fade) * k;
+    b.material.opacity = b.userData.fade;
+    // The outline holds on longer than the fill, so a faded block still reads as
+    // a block rather than disappearing.
+    b.userData.edge.material.opacity = 0.4 + 0.6 * b.userData.fade;
   }
 }
 
@@ -608,6 +658,7 @@ renderer.setAnimationLoop(now => {
   }
   paint();
   controls.update();
+  updateOcclusion(dt);      // after controls, so the camera is where it will render from
   renderer.render(scene, camera);
 });
 </script>
