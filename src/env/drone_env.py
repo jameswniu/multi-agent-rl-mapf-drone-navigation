@@ -45,6 +45,15 @@ _CLEAR = 0    # open ground
 _LOW = 1      # low enough to fly over
 _TALL = 2     # taller than any drone can climb
 
+# Cells also have a ceiling: the highest altitude allowed inside them. Almost
+# everywhere that is the drone's own limit and means nothing. A gap cut through a
+# solid wall is the exception, and it has to be, because a cell that is merely
+# clear is passable from any altitude: an early course put an opening in a wall
+# the drone could not climb, and the drone simply climbed once at the start and
+# flew through the opening without ever coming down. A ceiling of zero is what
+# actually makes a route require the ground.
+_TUNNEL = 0
+
 
 class DroneEnv(gym.Env):
     """Grid world holding one or more drones.
@@ -164,6 +173,7 @@ class DroneEnv(gym.Env):
         self.goals = np.zeros((self.num_drones, 2), dtype=np.float32)
         self.steps = 0
         self.heights = np.zeros((self.grid_size, self.grid_size), dtype=np.int32)
+        self.ceilings = np.full((self.grid_size, self.grid_size), self.max_altitude, dtype=np.int32)
 
     @property
     def obstacles(self) -> np.ndarray:
@@ -211,6 +221,10 @@ class DroneEnv(gym.Env):
                     data[key.strip()] = float(value) if "." in value else int(value)
             return data
 
+    def _generate_ceilings(self) -> np.ndarray:
+        """Default headroom everywhere; only a course cuts tunnels into it."""
+        return np.full((self.grid_size, self.grid_size), self.max_altitude, dtype=np.int32)
+
     def _generate_heights(self) -> np.ndarray:
         """Draw a fresh obstacle-height grid from the seeded RNG.
 
@@ -222,6 +236,8 @@ class DroneEnv(gym.Env):
         heights = np.zeros((self.grid_size, self.grid_size), dtype=np.int32)
         if self.terrain == "ridge":
             return self._generate_ridge(heights)
+        if self.terrain == "course":
+            return self._generate_course(heights)
         if self.obstacle_density <= 0:
             return heights
         occupied = self.np_random.random((self.grid_size, self.grid_size)) < self.obstacle_density
@@ -258,6 +274,47 @@ class DroneEnv(gym.Env):
             # One guaranteed low cell per wall, so the board stays crossable by
             # climbing even when every random draw came up solid.
             heights[mid, int(self.np_random.integers(0, self.grid_size))] = _LOW
+        return heights
+
+    def _generate_course(self, heights: np.ndarray) -> np.ndarray:
+        """Alternating barriers: low walls to fly over, tall walls to walk around.
+
+        Two crossings of one kind is not a course, it is the same move twice, and
+        on a board of only low walls the drone has no reason to come back down
+        between them. Holding altitude across a gap of g columns costs
+        (g + 1)(1 + p) against 3(1 + p) + g for dropping and re-climbing, so
+        descending only pays when g > (2 + 2p) / p. Buying that with a large
+        altitude_penalty was measured and does not work: at a penalty high enough
+        to matter, crossing is worth about -9.5 in shaped reward against +2 of
+        progress, the agent correctly concludes crossing is bad, and five seeds
+        never solve it.
+
+        A solid wall settles it without touching the economics. It is taller than
+        any drone can climb, so the only way past is the one gap in it, and the
+        drone has to be on the ground to use it. Descending stops being a trade
+        and becomes a requirement, which is what makes the course alternate:
+        climb over the low wall, come down for the solid one, walk to its gap,
+        then climb again.
+        """
+        for index, mid in enumerate(self._ridge_columns()):
+            if index % 2 == 0:
+                # Low the whole way across: no way around, so it must be flown.
+                heights[mid, :] = _LOW
+            else:
+                # Solid the whole way across but for one opening: no way over,
+                # so it must be walked around.
+                heights[mid, :] = _TALL
+                # Centred rather than random. A gap at the board edge forces a
+                # detour the full height of the grid twice over, which turned a
+                # 10 wide course into a 31 action route and put it out of reach.
+                # Centring also funnels a fleet through one opening, which is
+                # where drones actually have to take turns.
+                gap = self.grid_size // 2
+                heights[mid, gap] = _CLEAR
+                # The opening is a tunnel, not a doorway in the sky. Without the
+                # ceiling the drone climbs once at the start and flies through it
+                # still airborne, and the solid wall stops asking anything.
+                self.ceilings[mid, gap] = _TUNNEL
         return heights
 
     def describe_economics(self) -> str:
@@ -302,12 +359,14 @@ class DroneEnv(gym.Env):
         # Never spawn a drone somewhere the geofence would immediately trap it.
         free = np.array([c for c in free if self.safety.in_geofence(int(c[0]), int(c[1]))])
 
-        if self.terrain == "ridge":
-            # Straddle the barrier explicitly. The generic split sorts free cells
+        if self.terrain in ("ridge", "course"):
+            # Straddle every barrier explicitly. The generic split sorts free cells
             # and halves them, which has no idea a wall exists: on an eight wide
             # board it put the goal one column short of the ridge, on the same
             # side as the start, and the drone reached it without ever meeting
-            # the terrain the profile was built to pose.
+            # the terrain the profile was built to pose. A course leaving this
+            # out is worse still: the goal landed between the first and second
+            # walls, so the run never reached the solid wall it exists to show.
             cols = self._ridge_columns()
             left = np.array([c for c in free if c[0] < cols[0]])
             right = np.array([c for c in free if c[0] > cols[-1]])
@@ -358,10 +417,15 @@ class DroneEnv(gym.Env):
                 for p, a in zip(self.positions, self.altitudes)}
 
     def _is_obstacle(self, x: int, y: int, altitude: int = 0) -> bool:
-        """Whether the cell blocks a drone flying at this altitude."""
+        """Whether the cell blocks a drone flying at this altitude.
+
+        Blocked from below by its height and from above by its ceiling. Both are
+        needed: height alone lets a drone fly over everything a course puts in
+        front of it, including the gaps meant to be walked through.
+        """
         if not (0 <= x < self.grid_size and 0 <= y < self.grid_size):
             return False
-        return bool(self.heights[x, y] > altitude)
+        return bool(self.heights[x, y] > altitude or altitude > self.ceilings[x, y])
 
     def _is_impassable(self, x: int, y: int, occupied: set, altitude: int = 0) -> bool:
         """Whether a cell cannot be entered from this altitude, this turn.
@@ -378,7 +442,7 @@ class DroneEnv(gym.Env):
         """
         if not (0 <= x < self.grid_size and 0 <= y < self.grid_size):
             return True
-        return bool(self.heights[x, y] > altitude)
+        return bool(self.heights[x, y] > altitude or altitude > self.ceilings[x, y])
 
     def _sensor_flags(self, index: int, occupied: set) -> list:
         """Fifteen flags for one drone; each group runs up, down, left, right.
@@ -409,7 +473,9 @@ class DroneEnv(gym.Env):
                     and alt < self.heights[nx, ny] <= self.max_altitude) else 0.0
             for nx, ny in neighbours
         ]
-        blocked_climb = 1.0 if alt >= self.max_altitude else 0.0
+        # Climbing is illegal at the ceiling as well as at the drone's own limit,
+        # so a drone standing in a tunnel cannot rise inside it.
+        blocked_climb = 1.0 if (alt >= self.max_altitude or alt + 1 > self.ceilings[x, y]) else 0.0
         # Never descend into something you are flying over.
         blocked_descend = 1.0 if (alt <= 0 or self.heights[x, y] > alt - 1) else 0.0
 
@@ -502,6 +568,9 @@ class DroneEnv(gym.Env):
         """Altitude one action would leave a drone at, refusing illegal changes."""
         alt = int(self.altitudes[index])
         if action == 5:
+            x, y = int(self.positions[index][0]), int(self.positions[index][1])
+            if alt + 1 > self.ceilings[x, y]:
+                return alt          # no headroom here
             return min(self.max_altitude, alt + 1)
         if action == 6:
             x, y = int(self.positions[index][0]), int(self.positions[index][1])
@@ -517,7 +586,8 @@ class DroneEnv(gym.Env):
     # ------------------------------------------------------------------
     def reset(self, *, seed: int | None = None, options: dict | None = None) -> Tuple[np.ndarray, Dict[str, Any]]:
         super().reset(seed=seed)
-        self.heights = self._generate_heights()
+        self.ceilings = self._generate_ceilings()
+        self.heights = self._generate_heights()   # may cut tunnels into ceilings
         self._place()
         self.steps = 0
         self._reached = np.zeros(self.num_drones, dtype=bool)
@@ -694,6 +764,8 @@ class DroneEnv(gym.Env):
                 height = int(self.heights[x, y])
                 if height > _CLEAR:
                     grid[y][x] = "o" if height <= self.max_altitude else "#"
+                elif self.ceilings[x, y] < self.max_altitude:
+                    grid[y][x] = "n"      # tunnel: passable only on the ground
         for i, (gx, gy) in enumerate(self.goals.astype(int)):
             grid[gy][gx] = str(i % 10)
         for i, (x, y) in enumerate(self.positions.astype(int)):

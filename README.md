@@ -99,12 +99,18 @@ Every profile is solved, by every seed.
 |---|---|---|---|---|
 | One drone, 5x5 | 1000 | 5 of 5 | **4** | 4 |
 | Four drones, 8x8 | 12000 | 5 of 5 | **14** | 14 |
-| One drone, over a wall | 2000 | 5 of 5 | 7 | cost 8.5 vs optimal 8.5 |
-| Four drones, over a wall | 8000 | 5 of 5 | 11 | flight required |
+| One drone, obstacle course | 4000 | 5 of 5 | **19** | 19, with 2 climbs and 2 descents |
+| Four drones, obstacle course | 30000 | 5 of 5 | 20 | 19, with 2 climbs each |
 
 The lower bound on the flat profiles is the longest single-agent shortest path, from breadth-first search on the same board. No schedule can finish before its slowest drone could fly straight there alone, so matching it means every other drone yielded at **zero cost** to it. The fleet is not merely arriving; it is coordinating without waste.
 
-The two wall profiles are scored against Dijkstra over `(x, y, altitude)` rather than breadth-first search, because once altitude costs fuel the steps are no longer equal. On both of them **there is no ground route at all**, so a drone that never learns to climb never arrives.
+The two course profiles are scored against Dijkstra over `(x, y, altitude)` rather than breadth-first search, because once altitude costs fuel the steps are no longer equal. On both of them **there is no ground route at all**, and no route that stays airborne either.
+
+Arranging that second half is the harder part. The course alternates two kinds of barrier and neither answer works on the other: a **low wall** spans the board with no way around it, so it must be flown over, and a **solid wall** cannot be climbed at any altitude, so it must be walked through using the single tunnel cut into it. The optimal route is therefore climb, cross, land, walk through the tunnel, climb, cross, land, and the agent finds exactly that: 2 climbs and 2 descents per drone, matching the search.
+
+The tunnel has to be a tunnel rather than a doorway. An earlier version left the opening merely clear, and a clear cell is passable from any altitude, so the drone climbed once at the start and flew straight through it without ever coming down. Giving that one cell a ceiling of zero is what makes the route require the ground.
+
+The other way to force a descent is economic, making altitude expensive enough that dropping between walls beats holding it, which needs `g > (2 + 2p) / p` for a gap of `g` columns. That was measured and does not work: at a penalty high enough to matter, crossing is worth about `-9.5` in shaped reward against `+2` of progress, so the agent correctly concludes crossing is bad and five seeds never solve it.
 
 Reaching that took four fixes. Each was a real defect, each was found by measuring rather than reading, and only the last one felt like machine learning.
 
@@ -167,7 +173,9 @@ That last column is why the curve is drawn as a band rather than a line. A zero-
 
 Scrubbing the fleet timeline is the part worth doing. Untrained, the drones refuse **76** moves across 40 steps, roughly two every step, which is four drones colliding continuously. At 2000 episodes that falls to 8 refusals and three drones arrive. At 4000 it reaches zero refusals and all four arrive in 14 steps, and later checkpoints do not improve on 14 because 14 is the floor.
 
-The wall scenarios are the ones where the third dimension carries information rather than decoration. Step through **Four drones, over a wall** and at step 4 all four are airborne at once, crossing the barrier together; by step 7 every one has landed. Low segments of the wall are drawn short and green because a drone may fly over them, solid ones tall and dark because it may not.
+The course scenarios are the ones where the third dimension carries information rather than decoration. Step through **One drone, obstacle course** and the altitude reads `00000 111 0000000 111 0`: ground, over the first low wall, down and along to the tunnel, over the second low wall, down onto the goal.
+
+**Four drones, obstacle course** starts them on four different rows with a single tunnel between them and their goals, so their routes converge on one cell and they have to take turns. Their altitudes stagger rather than move together, which is what taking turns looks like from above.
 
 Two details in the viewer exist to keep it honest. The replayed routes are the **median seed**, not the first one, so a single lucky or unlucky run cannot flatter or libel the average printed beside it. And an early single-seed export scored *better untrained* than after 2000 episodes, which was network initialisation luck; that is why torch is now seeded and the curve is averaged.
 
