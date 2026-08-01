@@ -100,12 +100,29 @@ def rollout(env, agent, seed, record=True):
     frames = []
     total = 0.0
     refused = 0
+    landed = np.zeros(env.num_drones, dtype=bool)
+    bounced = np.zeros(env.num_drones, dtype=bool)
+    # Defined before the loop so a zero-step horizon still has a final state to
+    # score rather than raising on an unbound name.
+    home = np.zeros(env.num_drones, dtype=bool)
 
     for _ in range(env.max_steps):
         action = agent.predict(state)
         state, reward, terminated, truncated, info = env.step(action)
         total += float(reward)
         refused += int(info.get("collisions", 0))
+
+        home = np.array(
+            [
+                bool(np.array_equal(env.positions[i], env.goals[i]))
+                and int(env.altitudes[i]) == 0
+                for i in range(env.num_drones)
+            ]
+        )
+        # Leaving a goal already reached disqualifies the drone for the rest of
+        # the episode, even if it comes back and is standing there at the end.
+        bounced |= landed & ~home
+        landed |= home
 
         if record:
             frames.append(
@@ -118,11 +135,7 @@ def rollout(env, agent, seed, record=True):
                     # pad as arrived: the viewer read 4 of 8 on a step the
                     # environment scored 3, and the drone was drawn green while
                     # still in the air.
-                    "atGoal": [
-                        bool(np.array_equal(env.positions[i], env.goals[i]))
-                        and int(env.altitudes[i]) == 0
-                        for i in range(env.num_drones)
-                    ],
+                    "atGoal": [bool(v) for v in home],
                     "refused": int(info.get("collisions", 0)),
                     "reward": round(float(reward), 3),
                     "cumulative": round(total, 3),
@@ -131,11 +144,20 @@ def rollout(env, agent, seed, record=True):
         if terminated or truncated:
             break
 
-    arrived = sum(
-        bool(np.array_equal(env.positions[i], env.goals[i])) and int(env.altitudes[i]) == 0
-        for i in range(env.num_drones)
-    )
-    out = {"totalReward": round(total, 2), "arrived": int(arrived), "refusedTotal": refused}
+    # Arrival means arrived and stayed. A drone that reaches its goal, leaves,
+    # and drifts back by the final step is not a success: it never learned to
+    # hold station, and counting it hides that. Measured on the four drone
+    # board, the six thousand episode checkpoint scored a full fleet home while
+    # one drone landed and departed four separate times, which read identically
+    # to the twelve thousand checkpoint that simply lands and stops.
+    settled = home & ~bounced
+    out = {
+        "totalReward": round(total, 2),
+        "arrived": int(settled.sum()),
+        "occupying": int(home.sum()),
+        "bounced": int((home & bounced).sum()),
+        "refusedTotal": refused,
+    }
     if record:
         out["frames"] = frames
     return out

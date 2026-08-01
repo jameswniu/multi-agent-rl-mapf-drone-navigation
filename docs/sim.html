@@ -83,6 +83,10 @@
     font-variant-numeric: tabular-nums; font-size: 12px; color: var(--dim);
   }
   .opt[aria-pressed="true"] .meta { color: var(--green); }
+  /* Amber, so a checkpoint that bounces reads as neither arrived nor a ghost.
+     Set smaller than the count it annotates: at matching size the pair wrapped
+     onto two lines and the row looked broken rather than flagged. */
+  .opt .meta .drift { color: #c8a06a; margin-right: 0.5em; opacity: 0.85; font-size: 11px; }
 
   /* ghost toggle */
   #ghostRow {
@@ -380,17 +384,26 @@ function buildScene(sc) {
   // Goals painted flat. Raised columns read as obstacles, which is the one
   // confusion this scene cannot afford.
   const padGeo = new THREE.PlaneGeometry(0.78, 0.78).rotateX(-Math.PI / 2);
-  const padMat = new THREE.MeshBasicMaterial({ color: GOAL_GREEN, transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false });
-  const ringMat = new THREE.LineBasicMaterial({ color: GOAL_GREEN });
-  sc.goals.forEach(([x, y]) => {
+  // Each pad wears its owner's colour. Drawn identically, the goal column read
+  // as one shared destination, so a drone standing squarely on a green pad but
+  // rendered in its own tint looked like a contradiction. It was not: it was
+  // parked one square off, on a neighbour's pad. Ownership has to be visible or
+  // correct behaviour looks like a bug, and the fleet's own palette is already
+  // the vocabulary for whose-is-whose.
+  const padGreen = new THREE.MeshBasicMaterial({ color: GOAL_GREEN, transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false });
+  sc.goals.forEach(([x, y], i) => {
+    const tint = PALETTE[i % PALETTE.length];
     const p = world(x, y);
-    const pad = new THREE.Mesh(padGeo, padMat);
+    // The fill stays green so the board still reads as "these are the goals" at
+    // a glance; the owner's colour goes on the ring, which is the part you look
+    // at when asking whose pad this is.
+    const pad = new THREE.Mesh(padGeo, padGreen);
     pad.position.copy(p).setY(-0.045);
     board.add(pad);
     const ring = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints([
       new THREE.Vector3(-0.39, 0, -0.39), new THREE.Vector3(0.39, 0, -0.39),
       new THREE.Vector3(0.39, 0, 0.39), new THREE.Vector3(-0.39, 0, 0.39),
-    ]), ringMat);
+    ]), new THREE.LineBasicMaterial({ color: tint }));
     ring.position.copy(p).setY(-0.04);
     board.add(ring);
   });
@@ -601,7 +614,14 @@ function selectScenario(idx) {
   S.runs.forEach((r, k) => {
     const b = document.createElement('button');
     b.className = 'opt'; b.type = 'button'; b.setAttribute('aria-pressed', 'false');
-    b.innerHTML = `<span>${r.label}</span><span class="meta">${r.arrived}/${S.numDrones} home</span>`;
+    // "settled", not "home". A drone that reaches its goal, leaves, and drifts
+    // back by the last step is standing on its goal without having learned to
+    // hold station, and the two states looked identical when this said "home".
+    // Where they differ, the count of drones merely occupying a goal is shown
+    // alongside, so the gap is visible rather than quietly rounded away.
+    const drift = r.occupying != null && r.occupying > r.arrived
+      ? `<span class="drift">${r.occupying - r.arrived} bounced</span>` : '';
+    b.innerHTML = `<span>${r.label}</span><span class="meta">${drift}${r.arrived}/${S.numDrones} settled</span>`;
     b.title = `total reward ${r.totalReward}`;
     b.addEventListener('click', () => selectRun(k));
     el('runs').appendChild(b);
