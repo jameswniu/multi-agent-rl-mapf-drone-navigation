@@ -1,36 +1,36 @@
-# One drone, and a barrier it has to decide how to cross.
+# One drone, and a course that asks two different questions.
 #
 # Scattered obstacles turned out to test nothing. On a random board the trained
 # drone reached its goal at the true optimum having never once climbed, because a
 # clear ground route existed the whole time: the mechanic worked and the task
 # never asked for it.
 #
-# A wall asks. It spans the board between every start and every goal, most of it
-# low enough to fly over and some of it solid, so crossing is not one reflex: the
-# drone climbs where climbing works and walks to a crossing point where it does
-# not. There is no ground route at all, so a drone that never learns to climb
-# never arrives.
+# So the course alternates two kinds of barrier, and neither answer works on the
+# other. A low wall spans the board with no way around it, so it must be flown
+# over. A solid wall spans the board and cannot be climbed at any altitude, so it
+# must be walked through, using the single tunnel cut into it.
 #
-# altitude_penalty keeps the choice honest, because height is free to hold once
-# gained. Without a cost per airborne step the drone would climb on turn one and
-# treat the whole ridge as absent.
+# The tunnel is what brings the drone back down, and it has to be a tunnel rather
+# than a doorway. An earlier version left the gap merely clear, and a clear cell
+# is passable from any altitude: the drone climbed once at the start and flew
+# straight through the opening, never descending, and the solid wall stopped
+# asking anything. A ceiling of zero on that one cell is what makes the route
+# require the ground.
 #
-# On raising it: a second wall only poses a new question when dropping between
-# the two is cheaper than staying up, which needs g > (2 + 2p) / p for a gap of g
-# clear columns. At a 3 column gap that means p above 2.5, and there the profile
-# stops being learnable rather than merely harder: crossing costs about -9.5 in
-# shaped reward against +2 of progress, so the agent correctly concludes crossing
-# is bad and five seeds never solved it. A wider board at a low penalty is the
-# route to a two crossing course; see docs for the measured numbers.
+# The alternative way to force a descent is economic, making altitude expensive
+# enough that dropping between walls beats holding it, which needs
+# g > (2 + 2p) / p for a gap of g columns. That was measured and does not work:
+# at a penalty high enough to matter, crossing costs about -9.5 in shaped reward
+# against +2 of progress, so the agent correctly learns crossing is bad and five
+# seeds never solve it. Terrain settles the same question for free.
 
 grid_size: 8
 num_drones: 1
-terrain: ridge
-ridges: 1
-low_obstacle_ratio: 0.65
+terrain: course
+ridges: 3
 max_altitude: 1
 altitude_penalty: 0.5
-max_steps: 40
+max_steps: 50
 reward_shaping: true
 shaping_potential: terrain
 fixed_layout: true

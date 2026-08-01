@@ -195,6 +195,7 @@
   <div><span class="swatch" style="background:#6b5f52"></span>untrained ghost</div>
   <div><span class="swatch" style="background:#2f4038;border:1px solid #6faa85"></span>low, can be flown over</div>
   <div><span class="swatch" style="background:#232d27"></span>solid, must be gone around</div>
+  <div><span class="swatch" style="background:#3a4a42"></span>tunnel, ground only</div>
   <div style="margin-top:6px;color:#8b938e">drag to orbit, scroll to zoom</div>
 </div>
 
@@ -331,6 +332,23 @@ function buildScene(sc) {
     board.add(m);
     const e = new THREE.LineSegments(new THREE.EdgesGeometry(geo), crossable ? lowEdge : tallEdge);
     e.position.copy(m.position);
+    board.add(e);
+  }
+
+  // Tunnels: floor a drone may cross only while landed. Drawn as an opening in
+  // the wall with a lintel over it, because a bare floor tile beside a solid
+  // block reads as a doorway a drone could fly through, which is the one thing
+  // it cannot do.
+  const tunnelMat = new THREE.MeshStandardMaterial({ color: 0x3a4a42, roughness: 0.6, metalness: 0.4 });
+  for (const [tx, ty] of (sc.tunnels || [])) {
+    const p = world(tx, ty);
+    const lintel = new THREE.Mesh(new THREE.BoxGeometry(0.88, 0.62, 0.88), tunnelMat);
+    lintel.position.copy(p).setY(1.19);          // sits above the head of a landed drone
+    board.add(lintel);
+    const e = new THREE.LineSegments(
+      new THREE.EdgesGeometry(new THREE.BoxGeometry(0.88, 0.62, 0.88)),
+      new THREE.LineBasicMaterial({ color: 0x8fa79b }));
+    e.position.copy(lintel.position);
     board.add(e);
   }
 

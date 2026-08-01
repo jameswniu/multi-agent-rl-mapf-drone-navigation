@@ -62,17 +62,17 @@ SCENARIOS = [
     },
     {
         "key": "fly",
-        "name": "One drone, over a wall",
+        "name": "One drone, obstacle course",
         "config": "configs/fly.yaml",
-        "episodes": 2000,
-        "blurb": "A barrier with no way around it, so climbing is the only route.",
+        "episodes": 4000,
+        "blurb": "Low walls to fly over, a solid one to walk through.",
     },
     {
         "key": "fly-fleet",
-        "name": "Four drones, over a wall",
+        "name": "Four drones, obstacle course",
         "config": "configs/fly-fleet.yaml",
-        "episodes": 8000,
-        "blurb": "Four drones, one barrier, and a queue at the few crossings.",
+        "episodes": 30000,
+        "blurb": "Four rows, one tunnel, so the routes converge and have to queue.",
     },
 ]
 
@@ -140,6 +140,13 @@ def one_seed(spec, root, env_seed, torch_seed, sample_at, checkpoints, record):
             for x, y in zip(*np.where(env.heights > 0))
         ],
         "maxAltitude": int(env.max_altitude),
+        # Cells a drone may only occupy on the ground. They are not obstacles and
+        # would otherwise draw as bare floor, which hides the reason the route
+        # comes back down at all.
+        "tunnels": [
+            [int(x), int(y)]
+            for x, y in zip(*np.where(env.ceilings < env.max_altitude))
+        ],
         "goals": [[int(g[0]), int(g[1])] for g in env.goals],
         "starts": [[int(p[0]), int(p[1])] for p in env.positions],
     }
