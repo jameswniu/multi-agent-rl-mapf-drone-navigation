@@ -110,7 +110,7 @@ def test_render_draws_drones_goals_and_obstacles(tmp_path):
     taken |= {(int(x), int(y)) for x, y in env.goals}
     free = next((x, y) for x in range(env.grid_size) for y in range(env.grid_size)
                 if (x, y) not in taken)
-    env.obstacles[free] = True
+    env.heights[free] = 2
 
     art = env.render()
     rows = art.splitlines()
@@ -134,3 +134,69 @@ def test_demo_runs_end_to_end(capsys):
     assert "WHAT THIS DOES NOT SHOW" in out
     assert "conflicting moves refused" in out
     assert "Drones sharing a cell at any point: 0" in out
+
+
+def test_masking_a_confident_policy_still_yields_a_distribution():
+    """The mask must never return a row that fails to sum to 1.
+
+    Renormalising by a clamped floor is wrong whenever the surviving mass falls
+    below it. A trained policy puts nearly all its weight on one action, and when
+    the mask removes exactly that action the legal remainder can sit far under
+    any fixed epsilon. Dividing by the floor rather than the true sum then leaves
+    something that is not a distribution.
+
+    This is not hypothetical. It was found by the repository's own integrity
+    validator reporting probability drift partway through a four drone flight
+    run, having gone unnoticed because torch renormalises inside Categorical, so
+    the policy kept acting and nothing ever raised.
+    """
+    import numpy as np
+    import torch
+
+    from agents.ppo_agent import PPOAgent
+    from env.drone_env import DroneEnv
+
+    env = DroneEnv("configs/fly-fleet.yaml")
+    env.reset(seed=7)
+    agent = PPOAgent(env, action_masking=True)
+
+    width = env.observation_space.shape[-1]
+    obs = np.zeros((1, width), dtype=np.float32)
+    obs[0, 5:9] = [0, 0, 1, 0]      # only "left" is blocked
+    obs[0, 18:20] = [1, 1]          # neither climbing nor descending is legal
+
+    confident = torch.full((1, 7), 1e-12)
+    confident[0, 3] = 1.0 - 6e-12   # and "left" is exactly what it wants
+
+    masked = agent._mask_probs(obs, confident)
+    assert abs(float(masked.sum()) - 1.0) < 1e-5
+    assert float(masked[0, 3]) == 0.0, "a masked action keeps zero probability"
+
+
+def test_masking_survives_total_probability_underflow():
+    """A row that underflows to exactly zero must still be samplable.
+
+    The failure above has a sharper form: when the legal mass reaches zero the
+    old renormalisation produced an all-zero row, which Categorical cannot sample
+    from at all. Falling back to a uniform choice over the legal actions is the
+    honest reading, since the policy has no usable opinion left.
+    """
+    import numpy as np
+    import torch
+    from torch.distributions import Categorical
+
+    from agents.ppo_agent import PPOAgent
+    from env.drone_env import DroneEnv
+
+    env = DroneEnv("configs/fly-fleet.yaml")
+    env.reset(seed=7)
+    agent = PPOAgent(env, action_masking=True)
+
+    width = env.observation_space.shape[-1]
+    obs = np.zeros((1, width), dtype=np.float32)
+    obs[0, 18:20] = [1, 1]
+
+    masked = agent._mask_probs(obs, torch.zeros((1, 7)))
+    assert abs(float(masked.sum()) - 1.0) < 1e-5
+    assert not bool(torch.isnan(masked).any())
+    Categorical(masked).sample()    # must not raise

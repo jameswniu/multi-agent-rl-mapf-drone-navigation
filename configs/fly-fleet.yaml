@@ -1,0 +1,46 @@
+# Four drones, one barrier, and a queue.
+#
+# The single drone profile proves a drone can learn where to climb. This one adds
+# the part that only exists with a fleet: the crossable gaps in the wall are
+# scarce, so four drones heading for the same low span have to take turns.
+#
+# Altitude is what makes that survivable rather than a deadlock. Two drones in
+# one column at different heights are not in conflict, so a drone can pass over
+# one that is waiting instead of both refusing and neither moving. That is the
+# same reasoning as never masking peer occupancy: a rule that forbids approaching
+# another drone removes the manoeuvre that resolves the jam.
+#
+# Sized to the board the fleet already solves without flight. A 10 wide version
+# with fewer crossings was measured first and improves far too slowly to call
+# solved: 55 percent of drones home at 8000 episodes and 65 percent at 20000,
+# every run still hitting the step limit. The drones were climbing, roughly three
+# per run, so the mechanic was not the obstacle; the search was simply too big.
+#
+# This profile is NOT solved, and 8000 episodes is where it is least unsolved:
+# 3 seeds of 5 bring every drone home, 80 percent of drones arrive, and each of
+# the four climbs exactly once. Training further makes it worse, not better,
+# reaching 1 seed of 5 at 20000 and 0 of 5 at 40000.
+#
+# Batching the updates was the obvious suspect, since PPO here updates on a
+# single episode at a time. Gathering 16 before each update was measurably worse
+# at the same episode count, 20 percent of drones home at 8000 and 40 percent at
+# 20000, because a batch of 16 also means a sixteenth of the gradient steps. The
+# knob is still there as batch_episodes; what is not yet known is whether a
+# smaller batch with proportionally more episodes beats either, and that is the
+# next thing to measure rather than something to guess at.
+
+grid_size: 8
+num_drones: 4
+terrain: ridge
+ridges: 1
+low_obstacle_ratio: 0.75
+max_altitude: 1
+altitude_penalty: 0.5
+max_steps: 40
+reward_shaping: true
+shaping_potential: terrain
+fixed_layout: true
+
+safety:
+  geofence_margin: 0
+  min_separation: 0

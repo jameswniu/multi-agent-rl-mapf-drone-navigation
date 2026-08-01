@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from collections import deque
 from typing import Tuple, Dict, Any
 
 import numpy as np
@@ -28,10 +29,21 @@ from safety_controller import SafetyController
 # occupancy is reported as information the policy can weigh, never as a
 # constraint it cannot violate.
 _BASE_FEATURES = 5
-_STATIC_FLAGS = 4       # wall or obstacle: masked
+_STATIC_FLAGS = 4       # impassable at my current altitude: masked
 _PEER_FLAGS = 4         # another drone right now: observed only
-_SENSOR_FLAGS = _STATIC_FLAGS + _PEER_FLAGS
-_FEATURES_PER_DRONE = _BASE_FEATURES + _SENSOR_FLAGS
+_ALTITUDE_FEATURES = 1  # my own altitude
+_CLEAR_FLAGS = 4        # blocked now, but passable if I climb: observed only
+_VERTICAL_FLAGS = 2     # climb and descend legality: masked
+_FEATURES_PER_DRONE = (
+    _BASE_FEATURES + _STATIC_FLAGS + _PEER_FLAGS
+    + _ALTITUDE_FEATURES + _CLEAR_FLAGS + _VERTICAL_FLAGS
+)
+
+# Obstacle heights. A drone occupies a cell only when its altitude is at least
+# the cell's height, so height is literally how high you must fly to pass.
+_CLEAR = 0    # open ground
+_LOW = 1      # low enough to fly over
+_TALL = 2     # taller than any drone can climb
 
 
 class DroneEnv(gym.Env):
@@ -67,6 +79,10 @@ class DroneEnv(gym.Env):
         self.step_penalty: float = float(self.config.get("step_penalty", 1.0))
         self.collision_penalty: float = float(self.config.get("collision_penalty", 2.0))
         self.arrival_bonus: float = float(self.config.get("arrival_bonus", 10.0))
+        # Flying has to cost something. Climbing once and staying up would
+        # otherwise make every low obstacle free, and the choice between going
+        # over and going around would stop being a choice.
+        self.altitude_penalty: float = float(self.config.get("altitude_penalty", 0.5))
         self.completion_bonus: float = float(self.config.get("completion_bonus", 50.0))
         # A fixed layout makes the task stationary: the same starts and goals
         # every episode. Random placement re-poses the problem on every reset,
@@ -74,6 +90,27 @@ class DroneEnv(gym.Env):
         # works at all. Off by default; the demo profile turns it on.
         self.fixed_layout: bool = bool(self.config.get("fixed_layout", False))
         self.shaping_gamma: float = float(self.config.get("shaping_gamma", 0.99))
+        # Which distance the shaping potential measures. "manhattan" ignores
+        # terrain completely, which is fine on an open board and actively
+        # misleading once walls exist: it points a drone straight at a barrier
+        # and never credits the climb that gets it across. "terrain" measures
+        # the real walking distance, treating anything the drone could fly over
+        # as passable. That is a relaxation of the task, not a solution to it:
+        # it says which way the goal is, and still leaves the policy to work out
+        # when climbing is worth paying for.
+        self.shaping_potential: str = str(self.config.get("shaping_potential", "manhattan"))
+        # How high a drone may climb, and what share of obstacles are low enough
+        # to clear. Both default to the flat world, so every existing config
+        # keeps its exact behaviour: no climbing, and every obstacle solid.
+        self.max_altitude: int = int(self.config.get("max_altitude", 0))
+        self.low_obstacle_ratio: float = float(self.config.get("low_obstacle_ratio", 0.0))
+        # Terrain layout. Scattered obstacles almost never force a choice about
+        # altitude: measured on one such board the trained drone reached the goal
+        # at the true optimum having never once climbed, because a clear ground
+        # route existed. A ridge puts a barrier between start and goal on purpose,
+        # so going over and going around are the only two options.
+        self.terrain: str = str(self.config.get("terrain", "scatter"))
+        self.ridges: int = max(1, int(self.config.get("ridges", 1)))
 
         # Per drone: [x, y, goal_x, goal_y, steps_remaining,
         #             blocked_up, blocked_down, blocked_left, blocked_right,
@@ -89,8 +126,11 @@ class DroneEnv(gym.Env):
                 self.grid_size - 1,
                 self.grid_size - 1,
                 self.max_steps,
-                1.0, 1.0, 1.0, 1.0,   # blocked_up/down/left/right
-                1.0, 1.0, 1.0, 1.0,   # peer_up/down/left/right
+                1.0, 1.0, 1.0, 1.0,          # blocked_up/down/left/right
+                1.0, 1.0, 1.0, 1.0,          # peer_up/down/left/right
+                max(1.0, float(self.max_altitude)),   # own altitude
+                1.0, 1.0, 1.0, 1.0,          # clearable_up/down/left/right
+                1.0, 1.0,                    # blocked_climb, blocked_descend
             ],
             dtype=np.float32,
         )
@@ -100,9 +140,15 @@ class DroneEnv(gym.Env):
             dtype=np.float32,
         )
 
-        # One move per drone: 0 hover, 1 up, 2 down, 3 left, 4 right.
-        self.action_space = spaces.MultiDiscrete([5] * self.num_drones)
-        self.action_map = {0: "hover", 1: "up", 2: "down", 3: "left", 4: "right"}
+        # One move per drone. The vertical pair exists whatever max_altitude is,
+        # so the action space has a single shape; when climbing is disabled they
+        # are simply always masked out. A conditional space would leak into the
+        # network shape, saved weights and every test.
+        self.action_space = spaces.MultiDiscrete([7] * self.num_drones)
+        self.action_map = {
+            0: "hover", 1: "up", 2: "down", 3: "left", 4: "right",
+            5: "climb", 6: "descend",
+        }
 
         self.validator = IntegrityValidator(self.action_space, self.observation_space)
         # The validators report; this one refuses. It is the only component here
@@ -110,12 +156,38 @@ class DroneEnv(gym.Env):
         self.safety = SafetyController(self.grid_size, self.config.get("safety"))
 
         self.positions = np.zeros((self.num_drones, 2), dtype=np.float32)
+        self.altitudes = np.zeros(self.num_drones, dtype=np.int32)
         # Which drones have ever reached their goal this episode, so the arrival
         # bonus pays once rather than every step the drone sits there.
         self._reached = np.zeros(self.num_drones, dtype=bool)
+        self._distance_cache: Dict[int, Any] = {}
         self.goals = np.zeros((self.num_drones, 2), dtype=np.float32)
         self.steps = 0
-        self.obstacles = np.zeros((self.grid_size, self.grid_size), dtype=bool)
+        self.heights = np.zeros((self.grid_size, self.grid_size), dtype=np.int32)
+
+    @property
+    def obstacles(self) -> np.ndarray:
+        """Any cell that is not open ground, as the old boolean grid.
+
+        Kept because placement and most callers only ever asked "is something
+        here", and because a config that knows nothing about heights should
+        behave exactly as it always did.
+
+        Returned read-only on purpose. A derived array cannot be written through:
+        ``env.obstacles[2, 2] = True`` would build a temporary, set a bit on it
+        and discard it, changing nothing and reporting nothing. Marking it
+        unwritable turns that into an immediate error instead of a test that
+        quietly stops testing what it names. Write to ``heights`` instead, which
+        is the real terrain and can say how tall an obstacle is.
+        """
+        derived = self.heights > _CLEAR
+        derived.flags.writeable = False
+        return derived
+
+    @obstacles.setter
+    def obstacles(self, value) -> None:
+        # Assigning booleans yields the flat world: every obstacle solid.
+        self.heights = (np.asarray(value).astype(bool)).astype(np.int32) * _TALL
 
     # ------------------------------------------------------------------
     # Utility methods
@@ -139,12 +211,80 @@ class DroneEnv(gym.Env):
                     data[key.strip()] = float(value) if "." in value else int(value)
             return data
 
-    def _generate_obstacles(self) -> np.ndarray:
-        """Draw a fresh obstacle grid from the seeded RNG."""
-        grid = np.zeros((self.grid_size, self.grid_size), dtype=bool)
+    def _generate_heights(self) -> np.ndarray:
+        """Draw a fresh obstacle-height grid from the seeded RNG.
+
+        With ``low_obstacle_ratio`` at zero every obstacle is solid, which is the
+        flat world the earlier configs describe. Above zero, that share of them
+        become low enough to fly over, and the drone has a real choice between
+        climbing and detouring.
+        """
+        heights = np.zeros((self.grid_size, self.grid_size), dtype=np.int32)
+        if self.terrain == "ridge":
+            return self._generate_ridge(heights)
         if self.obstacle_density <= 0:
-            return grid
-        return self.np_random.random((self.grid_size, self.grid_size)) < self.obstacle_density
+            return heights
+        occupied = self.np_random.random((self.grid_size, self.grid_size)) < self.obstacle_density
+        low = self.np_random.random((self.grid_size, self.grid_size)) < self.low_obstacle_ratio
+        heights[occupied] = _TALL
+        heights[occupied & low] = _LOW
+        return heights
+
+    def _ridge_columns(self) -> list:
+        """Evenly spaced barrier columns, with clear ground on both outsides."""
+        n = self.ridges
+        return [int(round(self.grid_size * (k + 1) / (n + 1))) for k in range(n)]
+
+    def _generate_ridge(self, heights: np.ndarray) -> np.ndarray:
+        """Barriers across the board, mostly low, partly solid.
+
+        Each wall spans the full height, so a drone travelling from the low-x
+        side to the high-x side has to cross every one of them and cannot reach
+        its goal without deciding how.
+
+        Solid segments stop climbing from collapsing into a single reflex. Over a
+        low span flying is cheap; at a solid one the only answer is to go around,
+        so the drone has to read the terrain rather than learn one habit.
+
+        With more than one wall the interesting question moves to the gap between
+        them: hold altitude across it, or drop to the ground and climb again. That
+        is a genuine trade rather than a flourish, and which way it goes is set by
+        altitude_penalty against the width of the gap. See _describe_economics.
+        """
+        for mid in self._ridge_columns():
+            for y in range(self.grid_size):
+                solid = self.np_random.random() >= self.low_obstacle_ratio
+                heights[mid, y] = _TALL if solid else _LOW
+            # One guaranteed low cell per wall, so the board stays crossable by
+            # climbing even when every random draw came up solid.
+            heights[mid, int(self.np_random.integers(0, self.grid_size))] = _LOW
+        return heights
+
+    def describe_economics(self) -> str:
+        """Whether dropping between two walls is cheaper than staying airborne.
+
+        Crossing a gap of ``g`` clear columns and stepping onto the next wall
+        costs ``(g + 1)(1 + p)`` if altitude is held. Dropping costs one airborne
+        step onto the first gap cell, a descent, ``g - 1`` ground steps, a climb,
+        and an airborne step onto the wall: ``3(1 + p) + g``. Descending wins
+        exactly when ``g > (2 + 2p) / p``.
+
+        The three ``(1 + p)`` terms are the part that is easy to get wrong. An
+        earlier version of this counted only two and reported that dropping was
+        optimal on a board where the shortest path plainly held altitude, so the
+        helper contradicted the search that scored the runs.
+        """
+        p = self.altitude_penalty
+        if p <= 0:
+            return "altitude is free, so the drone should climb once and stay up"
+        cols = self._ridge_columns()
+        if len(cols) < 2:
+            return "one wall, so there is no gap to decide about"
+        gap = cols[1] - cols[0] - 1
+        need = (2 + 2 * p) / p
+        verdict = "drop and re-climb" if gap > need else "stay airborne"
+        return (f"gap {gap} columns, altitude_penalty {p}, threshold {need:.1f} "
+                f"-> optimal is to {verdict}")
 
     def _free_cells(self) -> np.ndarray:
         """Every cell not holding an obstacle, as an (n, 2) array."""
@@ -161,6 +301,25 @@ class DroneEnv(gym.Env):
         free = self._free_cells()
         # Never spawn a drone somewhere the geofence would immediately trap it.
         free = np.array([c for c in free if self.safety.in_geofence(int(c[0]), int(c[1]))])
+
+        if self.terrain == "ridge":
+            # Straddle the barrier explicitly. The generic split sorts free cells
+            # and halves them, which has no idea a wall exists: on an eight wide
+            # board it put the goal one column short of the ridge, on the same
+            # side as the start, and the drone reached it without ever meeting
+            # the terrain the profile was built to pose.
+            cols = self._ridge_columns()
+            left = np.array([c for c in free if c[0] < cols[0]])
+            right = np.array([c for c in free if c[0] > cols[-1]])
+            if len(left) < self.num_drones or len(right) < self.num_drones:
+                raise ValueError("ridge terrain needs room on both sides of the wall")
+            lo = np.lexsort((left[:, 1], left[:, 0]))
+            ro = np.lexsort((right[:, 1], right[:, 0]))
+            starts = left[lo][np.linspace(0, len(left) - 1, self.num_drones).astype(int)]
+            goals = right[ro][np.linspace(0, len(right) - 1, self.num_drones).astype(int)]
+            self.positions = starts.astype(np.float32)
+            self.goals = goals.astype(np.float32)
+            return
 
         if self.fixed_layout:
             # Deterministic and reproducible: the first free cells become starts,
@@ -192,15 +351,26 @@ class DroneEnv(gym.Env):
         self.goals = picks[self.num_drones :].astype(np.float32)
 
     def _occupied(self) -> set:
-        return {(int(p[0]), int(p[1])) for p in self.positions}
+        # Altitude is part of the key. Two drones sharing a column at different
+        # heights are not in conflict, which is both physically true and the
+        # thing that lets one drone pass over another that is stuck.
+        return {(int(p[0]), int(p[1]), int(a))
+                for p, a in zip(self.positions, self.altitudes)}
 
-    def _is_obstacle(self, x: int, y: int) -> bool:
+    def _is_obstacle(self, x: int, y: int, altitude: int = 0) -> bool:
+        """Whether the cell blocks a drone flying at this altitude."""
         if not (0 <= x < self.grid_size and 0 <= y < self.grid_size):
             return False
-        return bool(self.obstacles[x, y])
+        return bool(self.heights[x, y] > altitude)
 
-    def _is_impassable(self, x: int, y: int, occupied: set) -> bool:
-        """Whether a cell can never be entered: off the grid, or an obstacle.
+    def _is_impassable(self, x: int, y: int, occupied: set, altitude: int = 0) -> bool:
+        """Whether a cell cannot be entered from this altitude, this turn.
+
+        Off the grid, or standing taller than the drone is currently flying. It
+        is still safe to mask on: both facts are knowable alone and true for the
+        whole turn. A cell that is only blocked because the drone is low can be
+        reached by climbing first, and that shows up in the clearance flags
+        rather than being silently permitted here.
 
         A cell holding another drone is NOT impassable. It is occupied right now
         and may be free next step, and treating the two alike is what turned the
@@ -208,21 +378,45 @@ class DroneEnv(gym.Env):
         """
         if not (0 <= x < self.grid_size and 0 <= y < self.grid_size):
             return True
-        return bool(self.obstacles[x, y])
+        return bool(self.heights[x, y] > altitude)
 
     def _sensor_flags(self, index: int, occupied: set) -> list:
-        """Eight flags for one drone, each group in action order: up, down, left, right.
+        """Fifteen flags for one drone; each group runs up, down, left, right.
 
-        The first four are static impassability and drive the action mask. The
-        last four say a neighbour is there at this instant, which the policy can
-        act on but is never forced to obey.
+        Which of them are allowed to drive the action mask is the whole point of
+        splitting them. Masking is sound only for a fact that is permanent for
+        the turn and knowable by this drone alone.
+
+        * ``blocked``   impassable from the current altitude, so masked.
+        * ``peer``      a neighbour is there this instant. Never masked; it may
+                        move, and masking it manufactures deadlock.
+        * ``clearable`` blocked now but reachable after climbing. Never masked,
+                        because the drone can choose to climb; this is the flag
+                        that makes "over or around" a decision rather than a wall.
+        * ``vertical``  whether climbing and descending are legal at all, which
+                        is knowable and permanent, so masked.
         """
         x, y = int(self.positions[index][0]), int(self.positions[index][1])
-        others = occupied - {(x, y)}
+        alt = int(self.altitudes[index])
+        others = occupied - {(x, y, alt)}
         neighbours = [(x, y + 1), (x, y - 1), (x - 1, y), (x + 1, y)]
-        static = [1.0 if self._is_impassable(nx, ny, others) else 0.0 for nx, ny in neighbours]
-        peers = [1.0 if (nx, ny) in others else 0.0 for nx, ny in neighbours]
-        return static + peers
+
+        blocked = [1.0 if self._is_impassable(nx, ny, others, alt) else 0.0
+                   for nx, ny in neighbours]
+        peers = [1.0 if (nx, ny, alt) in others else 0.0 for nx, ny in neighbours]
+        clearable = [
+            1.0 if (self._in_bounds(nx, ny)
+                    and alt < self.heights[nx, ny] <= self.max_altitude) else 0.0
+            for nx, ny in neighbours
+        ]
+        blocked_climb = 1.0 if alt >= self.max_altitude else 0.0
+        # Never descend into something you are flying over.
+        blocked_descend = 1.0 if (alt <= 0 or self.heights[x, y] > alt - 1) else 0.0
+
+        return blocked + peers + [float(alt)] + clearable + [blocked_climb, blocked_descend]
+
+    def _in_bounds(self, x: int, y: int) -> bool:
+        return 0 <= x < self.grid_size and 0 <= y < self.grid_size
 
     def _get_obs(self) -> np.ndarray:
         steps_remaining = self.max_steps - self.steps
@@ -242,15 +436,57 @@ class DroneEnv(gym.Env):
         return np.array(rows, dtype=np.float32)
 
     def _potential(self, positions) -> np.ndarray:
-        """Negative Manhattan distance to each drone's goal.
+        """Negative distance to each drone's goal, higher being closer.
 
-        Used as the shaping potential. Closer to the goal is a higher potential,
-        so moving toward it earns a small positive shaping term.
+        Ng, Harada and Russell (1999) show any potential leaves the optimal
+        policy unchanged, so the choice here is purely about how much of a hint
+        the shaping carries.
         """
-        return -np.abs(positions - self.goals).sum(axis=1)
+        if self.shaping_potential != "terrain":
+            return -np.abs(positions - self.goals).sum(axis=1)
+
+        out = np.zeros(len(positions), dtype=np.float32)
+        for i, pos in enumerate(positions):
+            field = self._distance_field(i)
+            x, y = int(pos[0]), int(pos[1])
+            out[i] = -field.get((x, y), self.grid_size * 2)
+        return out
+
+    def _distance_field(self, index: int):
+        """Steps from every cell to drone ``index``'s goal, cached per episode.
+
+        Anything the drone could fly over counts as passable, so the field knows
+        a low wall is crossable without saying how much that costs or when to
+        bother. Only genuinely solid terrain blocks it. Computed once per goal
+        because a fixed layout never moves, and the walls never move either.
+        """
+        cached = self._distance_cache.get(index)
+        if cached is not None:
+            return cached
+
+        gx, gy = int(self.goals[index][0]), int(self.goals[index][1])
+        field = {(gx, gy): 0}
+        queue = deque([(gx, gy)])
+        while queue:
+            x, y = queue.popleft()
+            for nx, ny in ((x, y + 1), (x, y - 1), (x - 1, y), (x + 1, y)):
+                if not self._in_bounds(nx, ny) or (nx, ny) in field:
+                    continue
+                if self.heights[nx, ny] > self.max_altitude:
+                    continue
+                field[(nx, ny)] = field[(x, y)] + 1
+                queue.append((nx, ny))
+
+        self._distance_cache[index] = field
+        return field
 
     def _target(self, index: int, action: int) -> Tuple[float, float]:
-        """Where one action would take one drone, clamped at the grid edge."""
+        """Where one action would take one drone, clamped at the grid edge.
+
+        Climbing and descending hold position: a turn spent changing altitude is
+        a turn not spent covering ground, and that is exactly the cost that makes
+        flying over an obstacle a trade rather than a free pass.
+        """
         x, y = float(self.positions[index][0]), float(self.positions[index][1])
         if action == 1:
             y = min(self.grid_size - 1, y + 1)
@@ -262,15 +498,31 @@ class DroneEnv(gym.Env):
             x = min(self.grid_size - 1, x + 1)
         return x, y
 
+    def _target_altitude(self, index: int, action: int) -> int:
+        """Altitude one action would leave a drone at, refusing illegal changes."""
+        alt = int(self.altitudes[index])
+        if action == 5:
+            return min(self.max_altitude, alt + 1)
+        if action == 6:
+            x, y = int(self.positions[index][0]), int(self.positions[index][1])
+            below = alt - 1
+            # Descending into the obstacle you are flying over is not a move.
+            if below < 0 or self.heights[x, y] > below:
+                return alt
+            return below
+        return alt
+
     # ------------------------------------------------------------------
     # Gym API
     # ------------------------------------------------------------------
     def reset(self, *, seed: int | None = None, options: dict | None = None) -> Tuple[np.ndarray, Dict[str, Any]]:
         super().reset(seed=seed)
-        self.obstacles = self._generate_obstacles()
+        self.heights = self._generate_heights()
         self._place()
         self.steps = 0
         self._reached = np.zeros(self.num_drones, dtype=bool)
+        self.altitudes = np.zeros(self.num_drones, dtype=np.int32)
+        self._distance_cache = {}   # goals and terrain are redrawn on reset
         return self._get_obs(), {}
 
     def step(self, action) -> Tuple[np.ndarray, float, bool, bool, Dict[str, Any]]:
@@ -286,22 +538,36 @@ class DroneEnv(gym.Env):
         if actions.size != self.num_drones:
             raise ValueError(f"expected {self.num_drones} actions, got {actions.size}")
 
-        current = [(int(p[0]), int(p[1])) for p in self.positions]
+        # Cells carry altitude. Two drones sharing a column at different heights
+        # are not in conflict, so the whole comparison below has to be in three
+        # dimensions or a drone could never pass over one that is stuck.
+        current = [(int(p[0]), int(p[1]), int(a))
+                   for p, a in zip(self.positions, self.altitudes)]
         intended = []
         collided = [False] * self.num_drones
 
-        # Pass 1: an obstacle refuses the move outright.
+        # Pass 1: terrain refuses the move outright, judged at the altitude the
+        # drone would arrive at rather than the one it left.
         for i in range(self.num_drones):
-            tx, ty = self._target(i, int(actions[i]))
-            if self._is_obstacle(int(tx), int(ty)):
+            act = int(actions[i])
+            tx, ty = self._target(i, act)
+            talt = self._target_altitude(i, act)
+            if self._is_obstacle(int(tx), int(ty), talt):
                 intended.append(current[i])
                 collided[i] = True
             else:
-                intended.append((int(tx), int(ty)))
+                intended.append((int(tx), int(ty), talt))
 
-        # The Safety Controller arbitrates before drones are compared with each
-        # other, so a move it refuses never reaches conflict resolution at all.
-        intended, veto_reasons = self.safety.review(current, intended)
+        # The Safety Controller reasons in the plane, so it is handed plan-view
+        # cells and its refusals are mapped back onto the full move. A refused
+        # drone holds its altitude too; being sent up or down by a rule that
+        # never considered height would be a decision nobody made.
+        plan_current = [(c[0], c[1]) for c in current]
+        plan_intended = [(t[0], t[1]) for t in intended]
+        reviewed, veto_reasons = self.safety.review(plan_current, plan_intended)
+        for idx, cell in enumerate(reviewed):
+            if cell != plan_intended[idx]:
+                intended[idx] = current[idx]
         for idx in veto_reasons:
             collided[idx] = True
 
@@ -335,9 +601,13 @@ class DroneEnv(gym.Env):
             if not changed:
                 break
 
-        self.positions = np.array(intended, dtype=np.float32)
+        self.positions = np.array([(t[0], t[1]) for t in intended], dtype=np.float32)
+        self.altitudes = np.array([t[2] for t in intended], dtype=np.int32)
 
-        at_goal = np.all(self.positions == self.goals, axis=1)
+        # Arriving means landing on the goal, not hovering above it. Without the
+        # altitude term a drone could park in the air over its target and count
+        # as home, which is neither what a delivery is nor what the picture shows.
+        at_goal = np.all(self.positions == self.goals, axis=1) & (self.altitudes == 0)
 
         # A drone standing on its goal earns nothing further. Paying it every
         # step made camping an income stream, and because the episode ends only
@@ -347,6 +617,10 @@ class DroneEnv(gym.Env):
         # under the old reward was to strand one drone deliberately. The agent
         # was not failing to learn that; it was learning it correctly.
         rewards = np.where(collided, -self.collision_penalty, -self.step_penalty)
+        # Height costs fuel. Without this a drone climbs once, treats every low
+        # obstacle as absent for the rest of the episode, and the choice between
+        # going over and going around stops existing.
+        rewards = rewards - self.altitude_penalty * self.altitudes
         rewards = np.where(at_goal, 0.0, rewards)
 
         # Arrival pays once, on the step a drone first reaches its goal. Leaving
@@ -361,7 +635,11 @@ class DroneEnv(gym.Env):
             # without redefining what a good route is. A sparse +10 at the goal
             # is almost never stumbled upon on a large grid, which is why an
             # unshaped run looks like it is not learning at all.
-            before = self._potential(np.array(current, dtype=np.float32))
+            # Plan coordinates only. The potential measures ground distance to
+            # the goal, and cells now carry altitude as a third element.
+            before = self._potential(
+                np.array([(c[0], c[1]) for c in current], dtype=np.float32)
+            )
             after = self._potential(self.positions)
             rewards = rewards + self.shaping_gamma * after - before
 
@@ -384,7 +662,11 @@ class DroneEnv(gym.Env):
         truncated = bool(self.steps >= self.max_steps)
 
         obs = self._get_obs()
-        info: Dict[str, Any] = {"at_goal": int(at_goal.sum()), "rewards": per_drone}
+        info: Dict[str, Any] = {
+            "at_goal": int(at_goal.sum()),
+            "rewards": per_drone,
+            "altitudes": [int(a) for a in self.altitudes],
+        }
         if any(collided):
             info["collisions"] = int(sum(collided))
         if veto_reasons:
@@ -401,19 +683,23 @@ class DroneEnv(gym.Env):
         """Draw the grid as text.
 
         ``metadata`` has always advertised a human render mode without providing
-        one. Letters are drones, digits are their goals, and ``#`` is an
-        obstacle. Row order is flipped so y increases upward, which is what the
-        coordinates say and not what list order gives you.
+        one. Letters are drones, digits are their goals, ``o`` is an obstacle low
+        enough to fly over and ``#`` is one that is not. Row order is flipped so
+        y increases upward, which is what the coordinates say and not what list
+        order gives you.
         """
         grid = [["." for _ in range(self.grid_size)] for _ in range(self.grid_size)]
         for x in range(self.grid_size):
             for y in range(self.grid_size):
-                if self.obstacles[x, y]:
-                    grid[y][x] = "#"
+                height = int(self.heights[x, y])
+                if height > _CLEAR:
+                    grid[y][x] = "o" if height <= self.max_altitude else "#"
         for i, (gx, gy) in enumerate(self.goals.astype(int)):
             grid[gy][gx] = str(i % 10)
         for i, (x, y) in enumerate(self.positions.astype(int)):
-            grid[y][x] = chr(ord("A") + i % 26)
+            # Airborne drones render lowercase, so altitude is visible in text.
+            letter = chr(ord("A") + i % 26)
+            grid[y][x] = letter.lower() if self.altitudes[i] > 0 else letter
         return "\n".join(" ".join(row) for row in reversed(grid))
 
     def close(self):
