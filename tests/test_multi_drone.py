@@ -24,7 +24,7 @@ def pair(tmp_path):
     cfg.write_text("grid_size: 8\nnum_drones: 2\nobstacle_density: 0.0\nmax_steps: 50\n")
     e = DroneEnv(str(cfg))
     e.reset(seed=0)
-    e.obstacles[:] = False
+    e.heights[:] = 0
     try:
         yield e
     finally:
@@ -35,8 +35,11 @@ def test_fleet_size_comes_from_config():
     e = DroneEnv()
     assert e.num_drones == 10
     obs, _ = e.reset(seed=0)
-    assert obs.shape == (10, 13)
-    assert list(e.action_space.nvec) == [5] * 10
+    assert obs.shape == (10, 20)
+    # Seven: hover, the four planar moves, climb and descend. The vertical
+    # pair exists whatever max_altitude is, so the space has one shape and
+    # they are simply masked out on a board with no third dimension.
+    assert list(e.action_space.nvec) == [7] * 10
     e.close()
 
 
@@ -121,7 +124,7 @@ def test_a_peer_never_removes_a_move_from_the_policy(pair):
     agent = PPOAgent(pair, action_masking=True)
 
     obs = pair._get_obs()
-    probs = torch.ones(pair.num_drones, 5) / 5.0
+    probs = torch.ones(pair.num_drones, 7) / 7.0
     masked = agent._mask_probs(obs, probs)
 
     # Action 1 is "up", the direction drone 1 currently occupies.
@@ -176,7 +179,7 @@ def test_finishing_beats_stranding_a_drone(pair):
 
     # Same board, but drone 1 held one cell short of its goal.
     pair.reset(seed=0)
-    pair.obstacles[:] = False
+    pair.heights[:] = 0
     pair.positions = np.array([[2.0, 1.0], [6.0, 7.0]], dtype=np.float32)
     pair.goals = np.array([[2.0, 1.0], [7.0, 7.0]], dtype=np.float32)
 

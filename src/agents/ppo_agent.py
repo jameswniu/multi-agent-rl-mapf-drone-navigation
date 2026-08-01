@@ -75,7 +75,8 @@ class PPOAgent:
     - save(path)/load(path) -> persist model weights
     """
 
-    def __init__(self, env, lr=3e-4, gamma=0.99, eps_clip=0.2, epochs=3, action_masking=None):
+    def __init__(self, env, lr=3e-4, gamma=0.99, eps_clip=0.2, epochs=3, action_masking=None,
+                 batch_episodes=None):
         self.env = env
         # Invalid action masking. The observation already reports which moves are
         # blocked, so a drone should never have to walk into a wall to find out.
@@ -90,6 +91,16 @@ class PPOAgent:
         self.gamma = gamma       # discount factor
         self.eps_clip = eps_clip # PPO clipping parameter
         self.epochs = epochs     # policy update iterations
+        # How many episodes to gather before updating. One is the smallest batch
+        # PPO can run on and it shows: advantages get normalised over a single
+        # rollout, three epochs of gradient steps are taken on it, and it is
+        # thrown away. Across tens of thousands of updates that random-walks the
+        # policy rather than improving it. Measured on the four drone flight
+        # profile, longer training made things steadily worse, solving 3 seeds of
+        # 5 at 8000 episodes, 1 at 20000 and 0 at 40000.
+        if batch_episodes is None:
+            batch_episodes = int(getattr(env, "config", {}).get("batch_episodes", 1))
+        self.batch_episodes = max(1, int(batch_episodes))
 
         # One row of features per drone, and the same move set for each. The
         # policy weights are shared across drones: a single trunk is applied to
@@ -103,6 +114,7 @@ class PPOAgent:
         # network sees.
         self._grid = float(getattr(env, "grid_size", 1) or 1)
         self._horizon = float(getattr(env, "max_steps", 1) or 1)
+        self._ceiling = float(max(1, getattr(env, "max_altitude", 0) or 1))
 
         # Two extra inputs: the offset from the drone to its own goal. See
         # _features for why that is worth more than it looks.
@@ -134,10 +146,15 @@ class PPOAgent:
         so the first layer was dominated by whichever number happened to be
         largest, and the step counter drowned out the sensors.
         """
-        arr = np.atleast_2d(np.asarray(state, dtype=np.float32))
+        arr = np.atleast_2d(np.asarray(state, dtype=np.float32)).copy()
         x, y = arr[..., 0], arr[..., 1]
         gx, gy = arr[..., 2], arr[..., 3]
         steps = arr[..., 4]
+        # Column 13 is altitude, a count rather than a flag, so it is scaled like
+        # the coordinates. Left raw it would grow with the ceiling and start
+        # outweighing the sensors, which is the same failure the step counter had.
+        if arr.shape[-1] >= 14:
+            arr[..., 13] = arr[..., 13] / self._ceiling
         flags = arr[..., 5:]
 
         out = np.concatenate(
@@ -160,19 +177,52 @@ class PPOAgent:
         )
 
     def _mask_probs(self, state, probs):
-        """Zero out moves the observation already reports as blocked.
+        """Zero out moves the observation already reports as impossible.
 
-        Observation columns 5 to 8 are blocked_up, blocked_down, blocked_left
-        and blocked_right, matching action indices 1 to 4. Hover is index 0 and
-        is always legal, so the renormalised distribution can never be empty.
+        Columns 5 to 8 are blocked_up, blocked_down, blocked_left, blocked_right
+        and match action indices 1 to 4. Columns 18 and 19 say whether climbing
+        and descending are legal, matching action indices 5 and 6. Hover is index
+        0 and is always legal, so the renormalised distribution is never empty.
+
+        What is deliberately NOT masked is the clearance group at columns 14 to
+        17, which marks a neighbour that is blocked from the current altitude but
+        reachable after climbing. Masking those would delete the decision this
+        whole feature exists to pose: go over, or go around.
         """
         if not self.action_masking:
             return probs
-        flags = torch.as_tensor(np.atleast_2d(np.asarray(state))[..., 5:9], dtype=probs.dtype)
+        arr = np.atleast_2d(np.asarray(state))
         mask = torch.ones_like(probs)
-        mask[..., 1:5] = 1.0 - flags.reshape(mask[..., 1:5].shape)
+
+        planar = torch.as_tensor(arr[..., 5:9], dtype=probs.dtype)
+        mask[..., 1:5] = 1.0 - planar.reshape(mask[..., 1:5].shape)
+
+        # Older observations stop before the vertical pair; those environments
+        # have no third dimension, so there is nothing to mask.
+        if arr.shape[-1] >= 20:
+            vertical = torch.as_tensor(arr[..., 18:20], dtype=probs.dtype)
+            mask[..., 5:7] = 1.0 - vertical.reshape(mask[..., 5:7].shape)
+
         masked = probs * mask
-        return masked / masked.sum(dim=-1, keepdim=True).clamp_min(1e-8)
+        total = masked.sum(dim=-1, keepdim=True)
+
+        # Renormalising by a clamped floor is wrong whenever the surviving mass
+        # falls below it. A confident policy puts nearly all its weight on one
+        # action; when the mask removes exactly that action the legal remainder
+        # can be far under any fixed epsilon, and dividing by the floor instead
+        # of the true sum leaves a row that is not a distribution at all. Torch
+        # renormalises inside Categorical, so nothing crashes and the policy
+        # keeps acting, which is precisely why this survived unnoticed until the
+        # integrity validator reported the drift during a fleet run.
+        #
+        # Underflow all the way to zero is the sharper failure: the row becomes
+        # all zeros and cannot be sampled from.
+        #
+        # Where the policy has no usable opinion left, spread the choice evenly
+        # over whatever is still legal. That is the honest reading of the state,
+        # and every row stays a real distribution.
+        legal = mask.sum(dim=-1, keepdim=True).clamp_min(1.0)
+        return torch.where(total > 1e-8, masked / total.clamp_min(1e-8), mask / legal)
 
     def _guard_probs(self, probs, value):
         """Report a non-finite policy output as drift before it can crash."""
@@ -219,23 +269,23 @@ class PPOAgent:
         """
         Train the PPO agent for a number of episodes.
 
-        Every quantity below is per drone, shape ``(timesteps, num_drones)``,
-        rather than one number per timestep. That distinction is the difference
-        between a fleet that coordinates and one that cannot: with a single
-        shared advantage, a drone is credited for outcomes it had no part in and
-        blamed for failures it did not cause, so its gradient is mostly other
-        drones' noise. A single drone is the degenerate case and is unaffected.
+        Episodes are gathered into a batch of ``batch_episodes`` before the
+        policy is updated. Every per-timestep quantity below is per drone, shape
+        ``(timesteps, num_drones)``, rather than one number per timestep: with a
+        single shared advantage a drone is credited for outcomes it had no part
+        in and blamed for failures it did not cause, so its gradient is mostly
+        other drones' noise. A single drone is the degenerate case, unaffected.
 
         The policy itself is shared across drones. Each drone sees only its own
         observation row and contributes its own transitions, which is parameter
         sharing with independent credit.
         """
+        pending = []
         for ep in range(num_episodes):
             state, _ = self.env.reset()
             log_probs, rewards, states, actions = [], [], [], []
             terminated, truncated = False, False
 
-            # Rollout one episode
             while not (terminated or truncated):
                 action, log_prob = self.select_action(state)
                 next_state, reward, terminated, truncated, info = self.env.step(action)
@@ -252,16 +302,34 @@ class PPOAgent:
                 actions.append(action)
                 rewards.append(per_drone)
                 log_probs.append(log_prob)
-
                 state = next_state
 
-            # Discounted returns, computed down each drone's own timeline.
+            episode_reward = float(np.array(rewards).sum())
+            # Declared in utils/metrics.py and, until now, never written to, so
+            # the Grafana training-reward panel had no series behind it.
+            TRAINING_REWARD.observe(episode_reward)
+            print(f"Episode {ep+1}, total reward={episode_reward:.2f}")
+
+            # Discounted returns run down each drone's own timeline, and must be
+            # computed per episode: a batch holds several, and carrying a return
+            # across the boundary would credit one episode's actions with the
+            # next one's outcome.
             rewards_t = torch.tensor(np.array(rewards), dtype=torch.float32)
             discounted = torch.zeros_like(rewards_t)
             running = torch.zeros(rewards_t.shape[1])
             for t in reversed(range(rewards_t.shape[0])):
                 running = rewards_t[t] + self.gamma * running
                 discounted[t] = running
+
+            pending.append((states, actions, log_probs, discounted))
+            if len(pending) < self.batch_episodes and ep < num_episodes - 1:
+                continue
+
+            states_np = np.array([s for e in pending for s in e[0]], dtype=np.float32)
+            actions_t = torch.tensor(np.array([a for e in pending for a in e[1]]), dtype=torch.long)
+            old_log_probs = torch.stack([lp for e in pending for lp in e[2]])
+            discounted = torch.cat([e[3] for e in pending], dim=0)
+            pending = []
 
             # Normalize returns -> improves training stability.
             # Only when there are at least two samples. The unbiased std of a
@@ -274,13 +342,7 @@ class PPOAgent:
             if discounted.numel() > 1:
                 discounted = (discounted - discounted.mean()) / (discounted.std() + 1e-8)
 
-            # Policy update for several epochs
             for _ in range(self.epochs):
-                states_np = np.array(states, dtype=np.float32)
-                actions_t = torch.tensor(np.array(actions), dtype=torch.long)
-                old_log_probs = torch.stack(log_probs)
-
-                # Forward pass
                 probs, values = self.policy(self._features(states_np))
                 # The same mask must be applied here. Sampling from a masked
                 # distribution and then scoring those actions against an
@@ -305,29 +367,18 @@ class PPOAgent:
                 if advantages.numel() > 1:
                     advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
-                # PPO surrogate loss
                 ratio = (new_log_probs - old_log_probs.detach()).exp()
                 surr1 = ratio * advantages
                 surr2 = torch.clamp(ratio, 1 - self.eps_clip, 1 + self.eps_clip) * advantages
-
-                # Value loss (MSE)
                 value_loss = (discounted - state_values) ** 2
 
-                # Total loss = policy + value - entropy
                 loss = -torch.min(surr1, surr2).mean() \
                        + 0.5 * value_loss.mean() \
                        - 0.01 * entropy
 
-                # Gradient update
                 self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
-
-            episode_reward = float(rewards_t.sum())
-            # Declared in utils/metrics.py and, until now, never written to, so
-            # the Grafana training-reward panel had no series behind it.
-            TRAINING_REWARD.observe(episode_reward)
-            print(f"Episode {ep+1}, total reward={episode_reward:.2f}")
 
     def save(self, path):
         """Save model weights to disk."""

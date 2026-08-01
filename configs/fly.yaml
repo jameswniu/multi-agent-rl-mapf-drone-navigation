@@ -1,0 +1,40 @@
+# One drone, and a barrier it has to decide how to cross.
+#
+# Scattered obstacles turned out to test nothing. On a random board the trained
+# drone reached its goal at the true optimum having never once climbed, because a
+# clear ground route existed the whole time: the mechanic worked and the task
+# never asked for it.
+#
+# A wall asks. It spans the board between every start and every goal, most of it
+# low enough to fly over and some of it solid, so crossing is not one reflex: the
+# drone climbs where climbing works and walks to a crossing point where it does
+# not. There is no ground route at all, so a drone that never learns to climb
+# never arrives.
+#
+# altitude_penalty keeps the choice honest, because height is free to hold once
+# gained. Without a cost per airborne step the drone would climb on turn one and
+# treat the whole ridge as absent.
+#
+# On raising it: a second wall only poses a new question when dropping between
+# the two is cheaper than staying up, which needs g > (2 + 2p) / p for a gap of g
+# clear columns. At a 3 column gap that means p above 2.5, and there the profile
+# stops being learnable rather than merely harder: crossing costs about -9.5 in
+# shaped reward against +2 of progress, so the agent correctly concludes crossing
+# is bad and five seeds never solved it. A wider board at a low penalty is the
+# route to a two crossing course; see docs for the measured numbers.
+
+grid_size: 8
+num_drones: 1
+terrain: ridge
+ridges: 1
+low_obstacle_ratio: 0.65
+max_altitude: 1
+altitude_penalty: 0.5
+max_steps: 40
+reward_shaping: true
+shaping_potential: terrain
+fixed_layout: true
+
+safety:
+  geofence_margin: 0
+  min_separation: 0

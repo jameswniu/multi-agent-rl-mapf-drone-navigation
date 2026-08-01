@@ -21,7 +21,7 @@ def _env(tmp_path, drones=2, margin=0, separation=0, grid=10):
     )
     e = DroneEnv(str(cfg))
     e.reset(seed=0)
-    e.obstacles[:] = False
+    e.heights[:] = 0
     return e
 
 

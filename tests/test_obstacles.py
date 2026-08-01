@@ -35,10 +35,11 @@ def solo(tmp_path):
         e.close()
 
 
-def test_observation_is_one_row_of_thirteen_per_drone(env):
+def test_observation_is_one_row_of_twenty_per_drone(env):
     obs, _ = env.reset(seed=0)
-    # Five state values, four static blocked flags, four peer flags.
-    assert obs.shape == (env.num_drones, 13)
+    # Five state values, four blocked flags, four peer flags, altitude,
+    # four clearance flags, and the two vertical legality flags.
+    assert obs.shape == (env.num_drones, 20)
     assert env.observation_space.contains(obs)
 
 
@@ -72,8 +73,8 @@ def test_moving_into_an_obstacle_is_refused_and_costs_extra(solo):
     """Position unchanged, the step flagged, and dearer than a plain move."""
     solo.positions = np.array([[2.0, 2.0]], dtype=np.float32)
     solo.goals = np.array([[7.0, 7.0]], dtype=np.float32)
-    solo.obstacles[:] = False
-    solo.obstacles[2, 3] = True  # directly above
+    solo.heights[:] = 0
+    solo.heights[2, 3] = 2  # directly above
 
     obs, reward, terminated, truncated, info = solo.step([1])  # up
 
@@ -86,7 +87,7 @@ def test_moving_into_an_obstacle_is_refused_and_costs_extra(solo):
 def test_a_clear_move_is_not_flagged_and_costs_one(solo):
     solo.positions = np.array([[2.0, 2.0]], dtype=np.float32)
     solo.goals = np.array([[7.0, 7.0]], dtype=np.float32)
-    solo.obstacles[:] = False
+    solo.heights[:] = 0
 
     obs, reward, terminated, truncated, info = solo.step([1])  # up
 
@@ -98,8 +99,8 @@ def test_a_clear_move_is_not_flagged_and_costs_one(solo):
 def test_sensor_flags_report_obstacles_and_edges(solo):
     """The four trailing values per row are up, down, left, right."""
     solo.positions = np.array([[0.0, 0.0]], dtype=np.float32)
-    solo.obstacles[:] = False
-    solo.obstacles[0, 1] = True  # directly above the corner
+    solo.heights[:] = 0
+    solo.heights[0, 1] = 2  # directly above the corner
 
     up, down, left, right = solo._get_obs()[0][5:9]
 
