@@ -233,3 +233,174 @@ def test_masking_preserves_the_ranking_among_legal_actions():
 
     assert abs(float(masked.sum()) - 1.0) < 1e-5
     assert int(masked.argmax()) == 4, "the best legal action must survive the mask"
+
+
+def test_return_normalisation_over_one_episode_erases_the_success_signal():
+    """The measurement that motivated RunningNorm, stated as a test.
+
+    Eight drones all home returns about +47 against about 0 for a run that
+    strands one. Normalising over a single episode subtracts that episode's own
+    mean, so both collapse to the same standardised shape and the difference the
+    agent most needs is the one the update throws away.
+    """
+    from agents.ppo_agent import RunningNorm
+
+    horizon, fleet = 17, 8
+    def returns(rewards):
+        out = torch.zeros_like(rewards)
+        running = torch.zeros(fleet)
+        for t in range(horizon - 1, -1, -1):
+            running = rewards[t] + 0.99 * running
+            out[t] = running
+        return out
+
+    won = torch.full((horizon, fleet), -1.0)
+    won[-1] += 60.0                       # arrival plus the completion bonus
+    lost = torch.full((horizon, fleet), -1.0)
+    lost[-1, : fleet - 1] += 10.0         # one drone short, so no completion
+
+    won, lost = returns(won), returns(lost)
+    assert won.mean() - lost.mean() > 40, "the raw gap should be large"
+
+    def per_episode(x):
+        return (x - x.mean()) / (x.std() + 1e-8)
+
+    erased = abs(float(per_episode(won).mean() - per_episode(lost).mean()))
+    assert erased < 1e-5, "per-episode normalisation should erase the level"
+
+    shared = RunningNorm()
+    shared.update(torch.cat([won.reshape(-1), lost.reshape(-1)]))
+    kept = abs(float(shared.normalize(won).mean() - shared.normalize(lost).mean()))
+    assert kept > 1.0, "a shared scale must keep the two apart"
+
+
+def test_the_running_normaliser_forgets_when_given_a_horizon():
+    """Unbounded history is the flaw: it keeps rescaling against a dead past.
+
+    Without a cap the count grows without bound, so each new batch moves the
+    mean by less and less and the statistics lag ever further behind the returns
+    actually being earned. Capping the count holds each batch's influence fixed.
+    """
+    from agents.ppo_agent import RunningNorm
+
+    forgetful, hoarding = RunningNorm(horizon=1000), RunningNorm()
+    early = torch.full((500,), -50.0)
+    for _ in range(20):
+        forgetful.update(early)
+        hoarding.update(early)
+    late = torch.full((500,), 50.0)
+    for _ in range(4):
+        forgetful.update(late)
+        hoarding.update(late)
+
+    assert forgetful.mean > hoarding.mean, "a capped average should track the recent returns"
+    assert hoarding.count > forgetful.count
+
+
+def test_entropy_weight_is_constant_unless_a_schedule_is_asked_for(tmp_path):
+    """Annealing is opt-in, and off it must not perturb the existing behaviour."""
+    cfg = tmp_path / "env.yaml"
+    cfg.write_text("grid_size: 5\nnum_drones: 1\nobstacle_density: 0.0\nmax_steps: 10\n")
+    env = DroneEnv(str(cfg))
+    env.reset(seed=0)
+
+    plain = PPOAgent(env, entropy_coef=0.06)
+    assert plain._entropy_weight() == pytest.approx(0.06)
+    plain._episodes_seen = 10_000
+    assert plain._entropy_weight() == pytest.approx(0.06), "no schedule, no drift"
+
+    scheduled = PPOAgent(env, entropy_coef=0.10, entropy_final=0.01, anneal_episodes=1000)
+    assert scheduled._entropy_weight() == pytest.approx(0.10)
+    scheduled._episodes_seen = 500
+    assert scheduled._entropy_weight() == pytest.approx(0.055)
+    scheduled._episodes_seen = 5000
+    assert scheduled._entropy_weight() == pytest.approx(0.01), "clamped at the end value"
+    env.close()
+
+
+def test_the_crowded_board_carries_its_own_entropy_setting():
+    """Eight drones need more exploration than the agent's default provides.
+
+    Left at 0.01 the fleet collapses onto hovering and strands a drone; the
+    setting lives in the config rather than the agent because it costs accuracy
+    on boards that already solve.
+    """
+    crowded = DroneEnv("configs/fly-fleet8.yaml")
+    crowded.reset(seed=7)
+    assert PPOAgent(crowded).entropy_coef == pytest.approx(0.06)
+    crowded.close()
+
+    roomy = DroneEnv("configs/fly-fleet.yaml")
+    roomy.reset(seed=7)
+    assert PPOAgent(roomy).entropy_coef == pytest.approx(0.01), "solved profiles keep the default"
+    roomy.close()
+
+
+def test_an_entropy_schedule_set_entirely_in_config_actually_runs(tmp_path):
+    """Both halves of the schedule must come from the config, or neither works.
+
+    Reading entropy_final but not anneal_episodes leaves the duration at zero,
+    and a zero duration makes the weight hold its start value forever. The
+    profile would look annealed and be constant, which is the worst of the two
+    failure modes because nothing reports it.
+    """
+    cfg = tmp_path / "env.yaml"
+    cfg.write_text(
+        "grid_size: 5\nnum_drones: 1\nobstacle_density: 0.0\nmax_steps: 10\n"
+        "entropy_coef: 0.10\nentropy_final: 0.02\nanneal_episodes: 400\n"
+    )
+    env = DroneEnv(str(cfg))
+    env.reset(seed=0)
+
+    agent = PPOAgent(env)
+    assert agent.entropy_coef == pytest.approx(0.10)
+    assert agent.entropy_final == pytest.approx(0.02)
+    assert agent.anneal_episodes == 400, "the duration must come from the config too"
+
+    agent._episodes_seen = 200
+    assert agent._entropy_weight() == pytest.approx(0.06), "half way, so half way down"
+    env.close()
+
+
+def test_the_viewer_only_calls_a_drone_home_when_it_has_landed(tmp_path):
+    """The exported arrival flag must mean what the environment means by it.
+
+    A drone sitting on its goal's column at altitude one is not home: the
+    environment's own termination test is position AND altitude zero. The export
+    checked position alone, so the viewer painted a drone green while it was
+    still in the air and read four of eight on a step that scored three. The
+    end-of-episode totals were right, which is what made it survive: only the
+    frames mid-descent disagreed.
+    """
+    import numpy as np
+
+    from scripts import export_trajectory  # noqa: F401
+
+    cfg = tmp_path / "env.yaml"
+    cfg.write_text("grid_size: 5\nnum_drones: 1\nobstacle_density: 0.0\nmax_steps: 5\nmax_altitude: 1\n")
+    env = DroneEnv(str(cfg))
+    env.reset(seed=0)
+    env.heights[:] = 0
+    env.positions = np.array([[2.0, 2.0]], dtype=np.float32)
+    env.goals = np.array([[2.0, 2.0]], dtype=np.float32)
+
+    env.altitudes[0] = 1
+    hovering = np.all(env.positions == env.goals, axis=1) & (env.altitudes == 0)
+    assert not hovering[0], "the environment does not call a hovering drone home"
+
+    env.altitudes[0] = 0
+    landed = np.all(env.positions == env.goals, axis=1) & (env.altitudes == 0)
+    assert landed[0]
+    env.close()
+
+
+def test_the_exporter_reads_altitude_when_scoring_arrival():
+    """Guards the specific line, so the check cannot be dropped again."""
+    from pathlib import Path
+
+    source = Path("scripts/export_trajectory.py").read_text()
+    arrival_lines = [ln for ln in source.splitlines() if "env.goals[i]" in ln or "altitudes[i]" in ln]
+    joined = "\n".join(arrival_lines)
+    assert joined.count("altitudes[i]") >= 2, (
+        "both the per-frame flag and the run total must require altitude zero"
+    )

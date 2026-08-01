@@ -1,67 +1,71 @@
-# Eight drones on the same eight wide course. NOT SOLVED, and this file exists
-# to record how it fails rather than to claim it works.
+# Eight drones on the same eight wide course, and the densest board here that
+# is solved: ten seeds of ten bring every drone home, in 24 steps against the
+# best plan a central planner has found for this board, 17, with 33 refused
+# moves. Seventeen is a bound and not a proven optimum: prioritised planning is
+# incomplete and scripts/plan_optimum.py reports the best of 400 sampled
+# orderings, so the true optimum is 17 or better. That is the safe direction for
+# the comparison, since it means the policy is at least seven steps off what is
+# already known to be achievable.
 #
-# Best measured, on five seeds at 20000 episodes: 2 seeds of 5 bring every drone
-# home and 75 percent of drones arrive. It reliably gets almost everyone there
-# and strands one. Three seeds had suggested 96 percent, which is exactly the
-# kind of flattering number a small sample produces; the five seed figure is the
-# one to believe.
+# It sat unsolved for a long time at 2 seeds of 5 and 75 percent of drones
+# arriving, and the reason is worth keeping because almost every plausible
+# explanation was wrong. Ruled out by measurement, in order:
 #
-# Every configuration gets WORSE with more training, which is the same
-# non-monotonic instability seen elsewhere in this repository. Wall geometry was
-# swept and is not the remaining lever:
+#   feasibility     a space-time A* planner clears this exact board in 17 steps
+#                   of the 60 allowed, so there was never a capacity problem
+#   congestion      that 43 steps of slack says queueing was never binding, and
+#                   eight drones need FEWER steps here than four do
+#   wall geometry   swept 1, 2 and 3 tunnels across 2 and 3 walls; two openings
+#                   is best but no setting converts it
+#   goal packing    three walls leave one column, so eight goals pack it fully;
+#                   widening to 50 percent cut refusals 101 to 65 and arrived
+#                   no more drones
+#   grid size       six drones on a ten wide board did worse, 33 to 67 percent
+#   more training   flat at 2 seeds of 5 from 20000 episodes out to 60000, on
+#                   five seeds, at six times the training
+#   curriculum      training on four drones first and transferring the shared
+#                   weights made it WORSE, 1 seed of 5 against 2; the four drone
+#                   policy is a confident beeline that is wrong in a crowd and
+#                   will not unlearn
+#   epochs          five and ten are both worse than three
+#   entropy anneal  0.10 decaying to 0.01 gives 3 of 5, worse than holding 0.06
 #
-#   walls  tunnels  20000 episodes   50000 episodes
-#       3        1   0/3, 29% home   0/3, 71%, refusals 106 -> 179
-#       3        2   2/3, 96% home   1/3, 92%
-#       3        3   2/3, 79% home   not run
-#       2        2   0/3, 88% home   0/3, 75%
+# What it actually was: the drones had learned to stand still. Tracing a
+# stranded drone showed it reaching (3,7), descending, and then hovering for 56
+# consecutive steps while the clock ran out, with hover holding 0.83 of its
+# probability against 0.17 for the move that would have freed it. The board pays
+# +0.07 a step to move toward the tunnel and -0.92 a step to sit, and the drone
+# sat anyway, so this was never the reward being wrong. It is an exploration
+# collapse: once hover holds most of the mass, sampling stops trying anything
+# else and the collapse feeds itself. The baseline burns 107 idle hovers an
+# episode, which is the failure in one number.
 #
-# Two things were ruled out. The tunnel count looked like the whole answer and
-# was half right: one opening genuinely jams, two fixed most of it, and three
-# made it worse again because extra routes are extra ways to conflict. The goal
-# column density was the other suspect, since three walls leave exactly one
-# column for goals and eight drones pack it to 100 percent against 50 percent
-# for the four drone course; widening it to two walls cut refusals from 101 to
-# 65 but did not convert that into arrivals.
+# Raising the entropy weight off its 0.01 default is the whole fix, and it is
+# sharply peaked rather than a direction to push in:
 #
-# What is left unmeasured is the update itself. PPO here trains on a single
-# episode at a time, which is a tiny high variance batch, and that is the shape
-# of failure this repository has already been bitten by once. Batching 16 was
-# tested and was worse at equal episode count, but that is not a fair comparison
-# because it is also a sixteenth of the gradient steps. A smaller batch with
-# proportionally more episodes is the honest next experiment.
+#   entropy  seeds solved  drones home  refusals
+#      0.01           2/5          75%        74
+#      0.03           2/5          82%       177
+#      0.05           4/5          98%       129
+#      0.06           5/5         100%         27
+#      0.07           5/5         100%         17
+#      0.08           4/5          88%       114
+#      0.12           1/5          52%       280
 #
-# Four drones on this same course solve 5 seeds of 5. See configs/fly-fleet.yaml.
+# Past the peak the drones are simply noisy and start colliding with each other,
+# which is what the refusal column at 0.12 is showing. Two neighbouring settings
+# both solving is the reason to believe 0.06 rather than treat it as one lucky
+# draw, and 0.06 was then confirmed on ten seeds of ten.
 #
-# The drones start on different rows and share a single opening in the solid
-# wall, so their routes converge on it and they have to take turns rather than
-# meet head on. Altitude helps them do it: two drones in one column at different
-# heights are not in conflict, so one can pass over another that is waiting.
+# 20000 episodes is the budget, and more is worse rather than merely wasteful:
+# the same 0.06 run taken to 40000 falls back to 4 seeds of 5 and 92 percent.
+# That matches the plateau measured on the 0.01 default, which sits flat at 2
+# seeds of 5 from 20000 out to 60000.
 #
-# Scattered obstacles turned out to test nothing. On a random board the trained
-# drone reached its goal at the true optimum having never once climbed, because a
-# clear ground route existed the whole time: the mechanic worked and the task
-# never asked for it.
-#
-# So the course alternates two kinds of barrier, and neither answer works on the
-# other. A low wall spans the board with no way around it, so it must be flown
-# over. A solid wall spans the board and cannot be climbed at any altitude, so it
-# must be walked through, using the single tunnel cut into it.
-#
-# The tunnel is what brings the drone back down, and it has to be a tunnel rather
-# than a doorway. An earlier version left the gap merely clear, and a clear cell
-# is passable from any altitude: the drone climbed once at the start and flew
-# straight through the opening, never descending, and the solid wall stopped
-# asking anything. A ceiling of zero on that one cell is what makes the route
-# require the ground.
-#
-# The alternative way to force a descent is economic, making altitude expensive
-# enough that dropping between walls beats holding it, which needs
-# g > (2 + 2p) / p for a gap of g columns. That was measured and does not work:
-# at a penalty high enough to matter, crossing costs about -9.5 in shaped reward
-# against +2 of progress, so the agent correctly learns crossing is bad and five
-# seeds never solve it. Terrain settles the same question for free.
+# The setting is deliberately here rather than in the agent default. It is
+# medicine for a crowded board and it costs accuracy on an empty one: at 0.05
+# the four drone course drops to 2 seeds of 3 and takes 29 steps where the same
+# board is walked in 19. Profiles that already solve keep the 0.01 default.
 
 grid_size: 8
 num_drones: 8
@@ -78,21 +82,21 @@ safety:
   geofence_margin: 0
   min_separation: 0
 
-# Two walls rather than three, and two openings rather than one, both for the
-# same reason: on an eight wide board eight drones are close to the packing
-# limit, and the binding constraint turned out not to be the one that looked
-# obvious.
+# Two openings in the solid wall rather than one. One genuinely jams: eight
+# drones refused 106 moves across 60 steps at 20000 episodes and 179 at 50000,
+# getting worse rather than better, against zero on the four drone course. Two
+# fixed most of it. Three made it worse again, because extra routes are extra
+# ways to conflict rather than less queueing. Two is the measured best.
 #
-# Three walls consume three columns and leave exactly one for goals, so eight
-# drones means eight goals in eight cells: a goal region that is 100 percent
-# packed, and every drone landing into a full column. The four drone course sits
-# at 50 percent, and two walls put eight drones back at the same 50 percent.
-#
-# The tunnel count was the obvious suspect and was only half right. One opening
-# genuinely jams: eight drones refused 106 moves across 60 steps at 20000
-# episodes and 179 at 50000, getting worse rather than better, against zero
-# refusals on the four drone course. Two openings fixed most of it, reaching 96
-# percent of drones home. Three openings then made it worse again, 79 percent
-# with more refusals, because extra routes are extra ways to conflict rather
-# than less queueing. Two is the measured best.
+# Three walls are kept even though they leave exactly one column for goals, so
+# eight drones pack it completely against 50 percent for the four drone course.
+# Widening to two walls was tried precisely because that packing looked like the
+# binding constraint. It cut refusals from 101 to 65 and brought no more drones
+# home, 0 seeds of 3 against 2, so the packing was a red herring and the third
+# wall stays.
 tunnels_per_wall: 2
+
+# Raised off the 0.01 default because eight drones on this board collapse onto
+# hovering; see the header for the measurements. Sharply peaked: 0.05 gives 4
+# seeds of 5 and 0.08 gives 4 of 5, while 0.06 gives 5 of 5.
+entropy_coef: 0.06

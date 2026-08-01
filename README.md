@@ -407,8 +407,8 @@ Worth reading before the deployment sections. The repository name is older than 
 | MAPF, multi-agent path finding | **Implemented**. Vertex, swap and stationary conflicts detected and refused each step |
 | Obstacles | **Implemented**. Drawn from `obstacle_density`, refuse movement, and are locally sensed |
 | Safety Controller | **Implemented**. Geofence and separation, the only component permitted to veto |
-| Learning, small fixed profile | **Implemented**. 5 of 5 seeds solve `configs/demo.yaml` |
-| Learning, shipped profile | **Not solved**. Ten drones on 20x20 with random layouts defeats this implementation |
+| Learning, fixed profiles | **Implemented**. Every seed solves all five: one drone on 5x5, four on 8x8, one and then four on the obstacle course, and eight on the obstacle course. The last needed `entropy_coef` raised off its default, for reasons recorded in [`configs/fly-fleet8.yaml`](configs/fly-fleet8.yaml) |
+| Learning, shipped profile | **Not solved**. Ten drones on 20x20 with random layouts defeats this implementation. Every profile above uses `fixed_layout`, so generalising across layouts is untested rather than merely unfinished |
 | Potential-based reward shaping | **Implemented**, off by default via `reward_shaping` |
 | Fixed layouts for reproducible tasks | **Implemented** via `fixed_layout` |
 | `render()` | **Implemented**. `metadata` had advertised a human render mode with nothing behind it |

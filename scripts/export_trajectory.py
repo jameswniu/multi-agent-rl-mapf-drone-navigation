@@ -3,9 +3,10 @@
 The viewer draws whatever this writes and invents nothing, so every position and
 every number on screen came out of an actual episode.
 
-Two scenarios are exported, because the honest claim about this repository is a
-split one: the small profile learns and the multi-drone profile does not. Showing
-only one of them would be a choice about which half to hide.
+Every profile is exported rather than a chosen subset, because which ones are
+solved has changed more than once and picking a subset is a decision about what
+to hide. All five are solved now, so the split the viewer used to show is gone,
+but the rule stays: export them all and let the numbers say where each stands.
 
 Two kinds of evidence per scenario, and they answer different questions.
 
@@ -74,6 +75,17 @@ SCENARIOS = [
         "episodes": 30000,
         "blurb": "Four rows, one tunnel, so the routes converge and have to queue.",
     },
+    {
+        "key": "fly-fleet8",
+        "name": "Eight drones, obstacle course",
+        "config": "configs/fly-fleet8.yaml",
+        # Twenty thousand and not more. This profile gets worse with additional
+        # training rather than merely stopping improving: the same settings
+        # taken to forty thousand fall back from every seed solving to four of
+        # five. The config header carries the measurements.
+        "episodes": 20000,
+        "blurb": "Eight drones, two tunnels, and enough exploration to stop them standing still.",
+    },
 ]
 
 
@@ -100,8 +112,15 @@ def rollout(env, agent, seed, record=True):
                 {
                     "positions": [[int(p[0]), int(p[1])] for p in env.positions],
                     "altitudes": [int(a) for a in env.altitudes],
+                    # Altitude counts. The environment only calls a drone home
+                    # when it is on its goal AND on the ground, and leaving that
+                    # out here painted a drone hovering one level above its own
+                    # pad as arrived: the viewer read 4 of 8 on a step the
+                    # environment scored 3, and the drone was drawn green while
+                    # still in the air.
                     "atGoal": [
                         bool(np.array_equal(env.positions[i], env.goals[i]))
+                        and int(env.altitudes[i]) == 0
                         for i in range(env.num_drones)
                     ],
                     "refused": int(info.get("collisions", 0)),
@@ -113,7 +132,8 @@ def rollout(env, agent, seed, record=True):
             break
 
     arrived = sum(
-        bool(np.array_equal(env.positions[i], env.goals[i])) for i in range(env.num_drones)
+        bool(np.array_equal(env.positions[i], env.goals[i])) and int(env.altitudes[i]) == 0
+        for i in range(env.num_drones)
     )
     out = {"totalReward": round(total, 2), "arrived": int(arrived), "refusedTotal": refused}
     if record:
