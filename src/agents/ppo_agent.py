@@ -204,25 +204,35 @@ class PPOAgent:
             mask[..., 5:7] = 1.0 - vertical.reshape(mask[..., 5:7].shape)
 
         masked = probs * mask
-        total = masked.sum(dim=-1, keepdim=True)
 
-        # Renormalising by a clamped floor is wrong whenever the surviving mass
-        # falls below it. A confident policy puts nearly all its weight on one
-        # action; when the mask removes exactly that action the legal remainder
-        # can be far under any fixed epsilon, and dividing by the floor instead
-        # of the true sum leaves a row that is not a distribution at all. Torch
-        # renormalises inside Categorical, so nothing crashes and the policy
-        # keeps acting, which is precisely why this survived unnoticed until the
-        # integrity validator reported the drift during a fleet run.
+        # Normalising this row is fiddlier than it looks, and both obvious ways
+        # are wrong.
         #
-        # Underflow all the way to zero is the sharper failure: the row becomes
-        # all zeros and cannot be sampled from.
+        # Dividing by a clamped floor fails when the surviving mass falls under
+        # the floor: a confident policy puts nearly all its weight on one action,
+        # and if the mask removes exactly that action the legal remainder can be
+        # far below any fixed epsilon, so dividing by the floor rather than the
+        # true sum leaves a row that is not a distribution. Torch renormalises
+        # inside Categorical, so nothing raises and the policy keeps acting;
+        # the integrity validator is what reported the drift.
         #
-        # Where the policy has no usable opinion left, spread the choice evenly
-        # over whatever is still legal. That is the honest reading of the state,
-        # and every row stays a real distribution.
-        legal = mask.sum(dim=-1, keepdim=True).clamp_min(1.0)
-        return torch.where(total > 1e-8, masked / total.clamp_min(1e-8), mask / legal)
+        # Flattening the row to uniform whenever that happens is worse, and in a
+        # way that is invisible in the loss. It throws away the policy's ranking
+        # among the actions that ARE legal, and greedy prediction then just takes
+        # the lowest index, which is hover. Measured on a four drone flight run:
+        # a drone one cell from its goal hovered for thirteen consecutive steps
+        # while standing on a teammate's goal and blocking it, purely because its
+        # distribution had been flattened. Two seeds of five failed that way and
+        # both looked like a coordination failure rather than an arithmetic one.
+        #
+        # Rescaling by the row's own peak keeps the ordering and makes the sum
+        # safe to divide by, because the largest legal entry becomes exactly 1.
+        # Only a row whose legal mass is exactly zero falls back to uniform, and
+        # there the policy genuinely has no preference left to preserve.
+        tiny = torch.finfo(masked.dtype).tiny
+        peak = masked.max(dim=-1, keepdim=True).values
+        scaled = torch.where(peak > 0, masked / peak.clamp_min(tiny), mask)
+        return scaled / scaled.sum(dim=-1, keepdim=True).clamp_min(tiny)
 
     def _guard_probs(self, probs, value):
         """Report a non-finite policy output as drift before it can crash."""

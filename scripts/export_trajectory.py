@@ -53,8 +53,26 @@ SCENARIOS = [
         "key": "fleet",
         "name": "Four drones, 8x8",
         "config": "configs/sim.yaml",
+        # Twelve thousand, not eight. Widening the observation for altitude made
+        # this profile slower to learn without making it harder: eight thousand
+        # solved three seeds of five, twelve thousand solves all five and lands
+        # on the same fourteen step schedule as before.
+        "episodes": 12000,
+        "blurb": "Solved by every seed, on the shortest schedule that exists.",
+    },
+    {
+        "key": "fly",
+        "name": "One drone, over a wall",
+        "config": "configs/fly.yaml",
+        "episodes": 2000,
+        "blurb": "A barrier with no way around it, so climbing is the only route.",
+    },
+    {
+        "key": "fly-fleet",
+        "name": "Four drones, over a wall",
+        "config": "configs/fly-fleet.yaml",
         "episodes": 8000,
-        "blurb": "Solved by every seed. It needs four times the episodes.",
+        "blurb": "Four drones, one barrier, and a queue at the few crossings.",
     },
 ]
 
@@ -81,6 +99,7 @@ def rollout(env, agent, seed, record=True):
             frames.append(
                 {
                     "positions": [[int(p[0]), int(p[1])] for p in env.positions],
+                    "altitudes": [int(a) for a in env.altitudes],
                     "atGoal": [
                         bool(np.array_equal(env.positions[i], env.goals[i]))
                         for i in range(env.num_drones)
@@ -114,7 +133,13 @@ def one_seed(spec, root, env_seed, torch_seed, sample_at, checkpoints, record):
         "gridSize": env.grid_size,
         "numDrones": env.num_drones,
         "maxSteps": env.max_steps,
-        "obstacles": [[int(x), int(y)] for x, y in zip(*np.where(env.obstacles))],
+        # Height, not just presence. A low obstacle is one a drone can fly over,
+        # and drawing the two alike would hide the entire decision.
+        "obstacles": [
+            [int(x), int(y), int(env.heights[x, y])]
+            for x, y in zip(*np.where(env.heights > 0))
+        ],
+        "maxAltitude": int(env.max_altitude),
         "goals": [[int(g[0]), int(g[1])] for g in env.goals],
         "starts": [[int(p[0]), int(p[1])] for p in env.positions],
     }
