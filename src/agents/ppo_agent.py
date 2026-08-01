@@ -200,6 +200,12 @@ class PPOAgent:
         if entropy_final is None:
             entropy_final = getattr(env, "config", {}).get("entropy_final", None)
         self.entropy_final = float(entropy_final) if entropy_final is not None else self.entropy_coef
+        # Read from the config for the same reason entropy_final is. A profile
+        # that sets one and not the other gets no schedule at all, silently:
+        # anneal_episodes of zero makes _entropy_weight hold the start value
+        # forever, so the setting would look applied and do nothing.
+        if anneal_episodes is None:
+            anneal_episodes = getattr(env, "config", {}).get("anneal_episodes", None)
         self.anneal_episodes = int(anneal_episodes) if anneal_episodes else 0
         self._episodes_seen = 0
 

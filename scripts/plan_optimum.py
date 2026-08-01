@@ -1,12 +1,13 @@
-"""What is the best a central planner can do on these boards?
+"""What is the best a central planner can find on these boards?
 
 Two jobs. It answers whether a board can be solved at all, which is worth
 knowing before blaming the learner: the eight drone course sat unsolved for a
 long time under theories about congestion and packing, and this says the board
-is clearable in 17 steps of the 60 allowed, so none of those theories could have
+is clearable in 17 of the 60 steps allowed, so none of those theories could have
 been the whole story. And it gives the number the learned policy is measured
-against, which is why claims elsewhere in this repository quote a step count and
-an optimum side by side rather than a step count alone.
+against, which is why claims elsewhere quote a step count and a planned makespan
+side by side rather than a step count alone. That number is a bound, not an
+optimum, and should be described as one: see below.
 
 Prioritised planning with space-time A*: drones are routed one at a time and each
 treats the already-routed ones as moving obstacles. It is incomplete, so a

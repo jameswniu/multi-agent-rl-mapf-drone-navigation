@@ -334,3 +334,29 @@ def test_the_crowded_board_carries_its_own_entropy_setting():
     roomy.reset(seed=7)
     assert PPOAgent(roomy).entropy_coef == pytest.approx(0.01), "solved profiles keep the default"
     roomy.close()
+
+
+def test_an_entropy_schedule_set_entirely_in_config_actually_runs(tmp_path):
+    """Both halves of the schedule must come from the config, or neither works.
+
+    Reading entropy_final but not anneal_episodes leaves the duration at zero,
+    and a zero duration makes the weight hold its start value forever. The
+    profile would look annealed and be constant, which is the worst of the two
+    failure modes because nothing reports it.
+    """
+    cfg = tmp_path / "env.yaml"
+    cfg.write_text(
+        "grid_size: 5\nnum_drones: 1\nobstacle_density: 0.0\nmax_steps: 10\n"
+        "entropy_coef: 0.10\nentropy_final: 0.02\nanneal_episodes: 400\n"
+    )
+    env = DroneEnv(str(cfg))
+    env.reset(seed=0)
+
+    agent = PPOAgent(env)
+    assert agent.entropy_coef == pytest.approx(0.10)
+    assert agent.entropy_final == pytest.approx(0.02)
+    assert agent.anneal_episodes == 400, "the duration must come from the config too"
+
+    agent._episodes_seen = 200
+    assert agent._entropy_weight() == pytest.approx(0.06), "half way, so half way down"
+    env.close()

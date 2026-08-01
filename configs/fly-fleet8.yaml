@@ -1,12 +1,17 @@
 # Eight drones on the same eight wide course, and the densest board here that
-# is solved: ten seeds of ten bring every drone home, in 24 steps against a
-# centrally planned optimum of 17, with 33 refused moves.
+# is solved: ten seeds of ten bring every drone home, in 24 steps against the
+# best plan a central planner has found for this board, 17, with 33 refused
+# moves. Seventeen is a bound and not a proven optimum: prioritised planning is
+# incomplete and scripts/plan_optimum.py reports the best of 400 sampled
+# orderings, so the true optimum is 17 or better. That is the safe direction for
+# the comparison, since it means the policy is at least seven steps off what is
+# already known to be achievable.
 #
 # It sat unsolved for a long time at 2 seeds of 5 and 75 percent of drones
 # arriving, and the reason is worth keeping because almost every plausible
 # explanation was wrong. Ruled out by measurement, in order:
 #
-#   feasibility     a space-time A* planner solves this exact board in 17 steps
+#   feasibility     a space-time A* planner clears this exact board in 17 steps
 #                   of the 60 allowed, so there was never a capacity problem
 #   congestion      that 43 steps of slack says queueing was never binding, and
 #                   eight drones need FEWER steps here than four do
@@ -59,8 +64,8 @@
 #
 # The setting is deliberately here rather than in the agent default. It is
 # medicine for a crowded board and it costs accuracy on an empty one: at 0.05
-# the four drone course drops to 2 seeds of 3 and takes 29 steps against its
-# 19 step optimum. Profiles that already solve keep the 0.01 default.
+# the four drone course drops to 2 seeds of 3 and takes 29 steps where the same
+# board is walked in 19. Profiles that already solve keep the 0.01 default.
 
 grid_size: 8
 num_drones: 8
