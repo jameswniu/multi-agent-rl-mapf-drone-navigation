@@ -360,3 +360,47 @@ def test_an_entropy_schedule_set_entirely_in_config_actually_runs(tmp_path):
     agent._episodes_seen = 200
     assert agent._entropy_weight() == pytest.approx(0.06), "half way, so half way down"
     env.close()
+
+
+def test_the_viewer_only_calls_a_drone_home_when_it_has_landed(tmp_path):
+    """The exported arrival flag must mean what the environment means by it.
+
+    A drone sitting on its goal's column at altitude one is not home: the
+    environment's own termination test is position AND altitude zero. The export
+    checked position alone, so the viewer painted a drone green while it was
+    still in the air and read four of eight on a step that scored three. The
+    end-of-episode totals were right, which is what made it survive: only the
+    frames mid-descent disagreed.
+    """
+    import numpy as np
+
+    from scripts import export_trajectory  # noqa: F401
+
+    cfg = tmp_path / "env.yaml"
+    cfg.write_text("grid_size: 5\nnum_drones: 1\nobstacle_density: 0.0\nmax_steps: 5\nmax_altitude: 1\n")
+    env = DroneEnv(str(cfg))
+    env.reset(seed=0)
+    env.heights[:] = 0
+    env.positions = np.array([[2.0, 2.0]], dtype=np.float32)
+    env.goals = np.array([[2.0, 2.0]], dtype=np.float32)
+
+    env.altitudes[0] = 1
+    hovering = np.all(env.positions == env.goals, axis=1) & (env.altitudes == 0)
+    assert not hovering[0], "the environment does not call a hovering drone home"
+
+    env.altitudes[0] = 0
+    landed = np.all(env.positions == env.goals, axis=1) & (env.altitudes == 0)
+    assert landed[0]
+    env.close()
+
+
+def test_the_exporter_reads_altitude_when_scoring_arrival():
+    """Guards the specific line, so the check cannot be dropped again."""
+    from pathlib import Path
+
+    source = Path("scripts/export_trajectory.py").read_text()
+    arrival_lines = [ln for ln in source.splitlines() if "env.goals[i]" in ln or "altitudes[i]" in ln]
+    joined = "\n".join(arrival_lines)
+    assert joined.count("altitudes[i]") >= 2, (
+        "both the per-frame flag and the run total must require altitude zero"
+    )

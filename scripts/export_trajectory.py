@@ -112,8 +112,15 @@ def rollout(env, agent, seed, record=True):
                 {
                     "positions": [[int(p[0]), int(p[1])] for p in env.positions],
                     "altitudes": [int(a) for a in env.altitudes],
+                    # Altitude counts. The environment only calls a drone home
+                    # when it is on its goal AND on the ground, and leaving that
+                    # out here painted a drone hovering one level above its own
+                    # pad as arrived: the viewer read 4 of 8 on a step the
+                    # environment scored 3, and the drone was drawn green while
+                    # still in the air.
                     "atGoal": [
                         bool(np.array_equal(env.positions[i], env.goals[i]))
+                        and int(env.altitudes[i]) == 0
                         for i in range(env.num_drones)
                     ],
                     "refused": int(info.get("collisions", 0)),
@@ -125,7 +132,8 @@ def rollout(env, agent, seed, record=True):
             break
 
     arrived = sum(
-        bool(np.array_equal(env.positions[i], env.goals[i])) for i in range(env.num_drones)
+        bool(np.array_equal(env.positions[i], env.goals[i])) and int(env.altitudes[i]) == 0
+        for i in range(env.num_drones)
     )
     out = {"totalReward": round(total, 2), "arrived": int(arrived), "refusedTotal": refused}
     if record:
