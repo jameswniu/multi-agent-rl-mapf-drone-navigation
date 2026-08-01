@@ -120,6 +120,11 @@ class DroneEnv(gym.Env):
         # so going over and going around are the only two options.
         self.terrain: str = str(self.config.get("terrain", "scatter"))
         self.ridges: int = max(1, int(self.config.get("ridges", 1)))
+        # Openings per solid wall. One is a hard serialisation point: every drone
+        # must cross that single cell, so N drones cost at least N steps of pure
+        # queueing however well they coordinate. Fine for a small fleet, and the
+        # thing that jams a large one.
+        self.tunnels_per_wall: int = max(1, int(self.config.get("tunnels_per_wall", 1)))
 
         # Per drone: [x, y, goal_x, goal_y, steps_remaining,
         #             blocked_up, blocked_down, blocked_left, blocked_right,
@@ -304,17 +309,19 @@ class DroneEnv(gym.Env):
                 # Solid the whole way across but for one opening: no way over,
                 # so it must be walked around.
                 heights[mid, :] = _TALL
-                # Centred rather than random. A gap at the board edge forces a
-                # detour the full height of the grid twice over, which turned a
-                # 10 wide course into a 31 action route and put it out of reach.
-                # Centring also funnels a fleet through one opening, which is
-                # where drones actually have to take turns.
-                gap = self.grid_size // 2
-                heights[mid, gap] = _CLEAR
-                # The opening is a tunnel, not a doorway in the sky. Without the
-                # ceiling the drone climbs once at the start and flies through it
-                # still airborne, and the solid wall stops asking anything.
-                self.ceilings[mid, gap] = _TUNNEL
+                # Spread the openings evenly rather than placing them at random.
+                # A gap at the board edge forces a detour the full height of the
+                # grid twice over, which turned a 10 wide course into a 31 action
+                # route and put it out of reach. Evenly spaced also means the
+                # queues that form are the same size.
+                for k in range(self.tunnels_per_wall):
+                    gap = int(round(self.grid_size * (k + 1) / (self.tunnels_per_wall + 1)))
+                    gap = min(self.grid_size - 1, max(0, gap))
+                    heights[mid, gap] = _CLEAR
+                    # An opening is a tunnel, not a doorway in the sky. Without
+                    # the ceiling the drone climbs once at the start and flies
+                    # through still airborne, and the wall stops asking anything.
+                    self.ceilings[mid, gap] = _TUNNEL
         return heights
 
     def describe_economics(self) -> str:
