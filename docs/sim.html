@@ -193,7 +193,8 @@
   <div><span class="swatch" style="background:#e8ebe9"></span>trained policy</div>
   <div><span class="swatch" style="background:#6faa85"></span>arrived at its goal</div>
   <div><span class="swatch" style="background:#6b5f52"></span>untrained ghost</div>
-  <div><span class="swatch" style="background:#232d27"></span>obstacle</div>
+  <div><span class="swatch" style="background:#2f4038;border:1px solid #6faa85"></span>low, can be flown over</div>
+  <div><span class="swatch" style="background:#232d27"></span>solid, must be gone around</div>
   <div style="margin-top:6px;color:#8b938e">drag to orbit, scroll to zoom</div>
 </div>
 
@@ -260,6 +261,7 @@ let run = null;          // active checkpoint
 let ghostRun = null;     // its untrained counterpart
 let drones = [], trails = [], stems = [], ghosts = [];
 let world = () => new THREE.Vector3();
+let LIFT = 1.05;
 let cursor = 0, playing = true;
 let holding = 0;              // seconds spent dwelling on the finished state
 const SPEED = 3.2;            // frames per second
@@ -286,7 +288,11 @@ function buildScene(sc) {
   const off = (N - 1) / 2;
   world = (x, y) => new THREE.Vector3(x - off, 0, y - off);
 
-  FLY = Math.max(0.78, N * 0.115);   // always clears an obstacle top at 0.67
+  // Ground height for a landed drone, and how far one rise lifts it. A landed
+  // drone must sit below a low obstacle top and an airborne one above it, or the
+  // picture contradicts the rule the environment is enforcing.
+  FLY = 0.42;
+  LIFT = 1.05;
   scene.fog = new THREE.Fog(0x070b08, N * 1.8, N * 4.4);
   camera.position.set(N * 0.80, N * 0.92, N * 1.12);
   controls.target.set(0, -0.7, 0);
@@ -306,14 +312,24 @@ function buildScene(sc) {
   grid.position.y = -0.11;
   board.add(grid);
 
-  const obGeo = new THREE.BoxGeometry(0.88, 0.78, 0.88);
-  const obMat = new THREE.MeshStandardMaterial({ color: 0x232d27, roughness: 0.55, metalness: 0.5 });
-  const edgeMat = new THREE.LineBasicMaterial({ color: 0x7c8a82 });
-  for (const [x, y] of sc.obstacles) {
-    const m = new THREE.Mesh(obGeo, obMat);
-    m.position.copy(world(x, y)).setY(0.28);
+  // Obstacles carry a height. A low one can be flown over and a solid one cannot,
+  // so they are drawn at different heights and in different materials: reading
+  // them alike would hide the only decision this scene is about.
+  const ceiling = sc.maxAltitude || 0;
+  const tallMat = new THREE.MeshStandardMaterial({ color: 0x232d27, roughness: 0.55, metalness: 0.5 });
+  const lowMat = new THREE.MeshStandardMaterial({ color: 0x2f4038, roughness: 0.5, metalness: 0.45 });
+  const tallEdge = new THREE.LineBasicMaterial({ color: 0x7c8a82 });
+  const lowEdge = new THREE.LineBasicMaterial({ color: 0x6faa85 });
+  for (const cell of sc.obstacles) {
+    const [x, y] = cell;
+    const h = cell.length > 2 ? cell[2] : 2;         // older exports had no height
+    const crossable = ceiling > 0 && h <= ceiling;
+    const tall = crossable ? 0.5 : 1.5;
+    const geo = new THREE.BoxGeometry(0.88, tall, 0.88);
+    const m = new THREE.Mesh(geo, crossable ? lowMat : tallMat);
+    m.position.copy(world(x, y)).setY(tall / 2 - 0.11);
     board.add(m);
-    const e = new THREE.LineSegments(new THREE.EdgesGeometry(obGeo), edgeMat);
+    const e = new THREE.LineSegments(new THREE.EdgesGeometry(geo), crossable ? lowEdge : tallEdge);
     e.position.copy(m.position);
     board.add(e);
   }
@@ -377,9 +393,13 @@ function paint() {
   const showGhost = el('ghost').checked && ghostRun && ghostRun !== run;
 
   for (let d = 0; d < drones.length; d++) {
+    // Interpolate altitude too, so a climb reads as a rise rather than a jump.
+    const aAlt = a.altitudes ? a.altitudes[d] : 0;
+    const bAlt = b.altitudes ? b.altitudes[d] : 0;
     drones[d].position.lerpVectors(
       world(a.positions[d][0], a.positions[d][1]),
-      world(b.positions[d][0], b.positions[d][1]), t).setY(FLY);
+      world(b.positions[d][0], b.positions[d][1]), t)
+      .setY(FLY + LIFT * (aAlt + (bAlt - aAlt) * t));
     drones[d].rotation.y += 0.012;
 
     const home = a.atGoal[d];
@@ -394,7 +414,7 @@ function paint() {
     // Routes are traced on the floor. Drawn at flight height they hang in the
     // air and read as stray geometry rather than as a path anyone took.
     const pts = run.frames.slice(0, i + 1)
-      .map(f => world(f.positions[d][0], f.positions[d][1]).setY(0.02));
+      .map(f => world(f.positions[d][0], f.positions[d][1]).setY(0.02));  // route on the ground
     pts.unshift(world(S.starts[d][0], S.starts[d][1]).setY(0.02));
     trails[d].geometry.dispose();
     trails[d].geometry = new THREE.BufferGeometry().setFromPoints(pts);

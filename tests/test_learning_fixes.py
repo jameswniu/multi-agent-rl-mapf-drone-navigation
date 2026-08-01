@@ -200,3 +200,36 @@ def test_masking_survives_total_probability_underflow():
     assert abs(float(masked.sum()) - 1.0) < 1e-5
     assert not bool(torch.isnan(masked).any())
     Categorical(masked).sample()    # must not raise
+
+
+def test_masking_preserves_the_ranking_among_legal_actions():
+    """A flattened row is worse than an unnormalised one.
+
+    Falling back to uniform whenever the legal mass is small throws away the
+    policy's ordering, and greedy prediction then takes the lowest index, which
+    is hover. Measured on a four drone flight run: a drone one cell from its goal
+    hovered for thirteen consecutive steps while standing on a teammate's goal
+    and blocking it. It read as a coordination failure and was arithmetic.
+    """
+    import numpy as np
+    import torch
+
+    from agents.ppo_agent import PPOAgent
+    from env.drone_env import DroneEnv
+
+    env = DroneEnv("configs/fly-fleet.yaml")
+    env.reset(seed=7)
+    agent = PPOAgent(env, action_masking=True)
+
+    width = env.observation_space.shape[-1]
+    obs = np.zeros((1, width), dtype=np.float32)
+    obs[0, 5:9] = [0, 0, 1, 0]      # only "left" is blocked
+    obs[0, 18:20] = [1, 1]          # no vertical option
+
+    # Nearly all the mass sits on the blocked action, but the legal actions are
+    # still ordered: "right" outranks the rest.
+    probs = torch.tensor([[1e-20, 2e-20, 3e-20, 1.0 - 6e-20, 5e-20, 1e-20, 1e-20]])
+    masked = agent._mask_probs(obs, probs)
+
+    assert abs(float(masked.sum()) - 1.0) < 1e-5
+    assert int(masked.argmax()) == 4, "the best legal action must survive the mask"

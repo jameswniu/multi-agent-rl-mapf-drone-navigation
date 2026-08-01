@@ -93,14 +93,18 @@ The validators report and continue; they do not halt a run. That is the right ca
 
 ## What it learns, and how that was measured
 
-Both profiles are solved, by every seed, on the optimal route.
+Every profile is solved, by every seed.
 
-| profile | episodes | seeds solving it | steps taken | lower bound |
+| profile | episodes | seeds solving it | steps | lower bound |
 |---|---|---|---|---|
 | One drone, 5x5 | 1000 | 5 of 5 | **4** | 4 |
-| Four drones, 8x8 | 8000 | 5 of 5 | **14** | 14 |
+| Four drones, 8x8 | 12000 | 5 of 5 | **14** | 14 |
+| One drone, over a wall | 2000 | 5 of 5 | 7 | cost 8.5 vs optimal 8.5 |
+| Four drones, over a wall | 8000 | 5 of 5 | 11 | flight required |
 
-The lower bound is the longest single-agent shortest path, from breadth-first search on the same board. No schedule can finish before its slowest drone could fly straight there alone, so matching it means every other drone yielded at **zero cost** to it. The fleet is not merely arriving; it is coordinating without waste.
+The lower bound on the flat profiles is the longest single-agent shortest path, from breadth-first search on the same board. No schedule can finish before its slowest drone could fly straight there alone, so matching it means every other drone yielded at **zero cost** to it. The fleet is not merely arriving; it is coordinating without waste.
+
+The two wall profiles are scored against Dijkstra over `(x, y, altitude)` rather than breadth-first search, because once altitude costs fuel the steps are no longer equal. On both of them **there is no ground route at all**, so a drone that never learns to climb never arrives.
 
 Reaching that took four fixes. Each was a real defect, each was found by measuring rather than reading, and only the last one felt like machine learning.
 
@@ -152,14 +156,18 @@ Both profiles, replayed at four points during training. Orbit with the mouse, sc
 
 Nothing is simulated in the browser. `scripts/export_trajectory.py` plays greedy episodes against a live policy and writes every position to `docs/trajectory.json`; the page draws that file and computes nothing of its own. Greedy rather than sampled, because training reward is noisy while the policy is still exploring and the honest question is what it would do if you asked it now.
 
-| profile | mean reward, 5 seeds | drones home | spread across seeds at the end |
+| profile | mean reward | drones home | spread across seeds at the end |
 |---|---|---|---|
-| One drone, 5x5 | `-28.50` to `+61.06` | `0.0` to `1.0` of 1 | **`0`** |
-| Four drones, 8x8 | `-165.18` to `+245.25` | `0.0` to `4.0` of 4 | **`0`** |
+| One drone, 5x5 | `-28.89` to `+61.06` | `0.0` to `1.0` of 1 | **`0`** |
+| Four drones, 8x8 | `-196.35` to `+245.25` | `0.0` to `4.0` of 4 | **`0`** |
+| One drone, over a wall | `-49.16` to `+57.62` | `0.0` to `1.0` of 1 | **`0`** |
+| Four drones, over a wall | `-235.12` to `+223.16` | `0.0` to `4.0` of 4 | `24` |
 
 That last column is why the curve is drawn as a band rather than a line. A zero-width band means all five seeds finished on the same number, which is convergence rather than an average of runs that disagreed with each other.
 
-Scrubbing the fleet timeline is the part worth doing. Untrained, the drones refuse **76** moves across 40 steps, roughly two every step, which is four drones colliding continuously. At 2000 episodes that falls to 8 refusals and three drones arrive. At 4000 it reaches zero refusals and all four arrive in 14 steps, and 8000 does not improve on 14 because 14 is the floor.
+Scrubbing the fleet timeline is the part worth doing. Untrained, the drones refuse **76** moves across 40 steps, roughly two every step, which is four drones colliding continuously. At 2000 episodes that falls to 8 refusals and three drones arrive. At 4000 it reaches zero refusals and all four arrive in 14 steps, and later checkpoints do not improve on 14 because 14 is the floor.
+
+The wall scenarios are the ones where the third dimension carries information rather than decoration. Step through **Four drones, over a wall** and at step 4 all four are airborne at once, crossing the barrier together; by step 7 every one has landed. Low segments of the wall are drawn short and green because a drone may fly over them, solid ones tall and dark because it may not.
 
 Two details in the viewer exist to keep it honest. The replayed routes are the **median seed**, not the first one, so a single lucky or unlucky run cannot flatter or libel the average printed beside it. And an early single-seed export scored *better untrained* than after 2000 episodes, which was network initialisation luck; that is why torch is now seeded and the curve is averaged.
 
