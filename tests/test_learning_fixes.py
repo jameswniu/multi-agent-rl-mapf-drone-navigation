@@ -394,13 +394,79 @@ def test_the_viewer_only_calls_a_drone_home_when_it_has_landed(tmp_path):
     env.close()
 
 
-def test_the_exporter_reads_altitude_when_scoring_arrival():
-    """Guards the specific line, so the check cannot be dropped again."""
+class _ScriptedEnv:
+    """Minimal environment that replays a fixed sequence of positions.
+
+    The export's scoring rule is the thing under test, not the simulator, so
+    this drives it through an exact scripted path rather than training an agent
+    to produce one by luck.
+    """
+
+    max_altitude = 1
+
+    def __init__(self, path, goal):
+        self._path = path            # [(x, y, altitude), ...] one entry per step
+        self.goals = np.array([goal], dtype=np.float32)
+        self.num_drones = 1
+        self.max_steps = len(path)
+        self.grid_size = 8
+        self._t = 0
+        self.positions = np.array([path[0][:2]], dtype=np.float32)
+        self.altitudes = np.array([path[0][2]])
+
+    def reset(self, seed=None):
+        self._t = 0
+        self.positions = np.array([self._path[0][:2]], dtype=np.float32)
+        self.altitudes = np.array([self._path[0][2]])
+        return None, {}
+
+    def step(self, action):
+        self._t += 1
+        x, y, alt = self._path[min(self._t, len(self._path) - 1)]
+        self.positions = np.array([[x, y]], dtype=np.float32)
+        self.altitudes = np.array([alt])
+        return None, 0.0, False, self._t >= len(self._path) - 1, {}
+
+
+class _Idle:
+    def predict(self, state):
+        return [0]
+
+
+def _score(path, goal):
+    import importlib.util
     from pathlib import Path
 
-    source = Path("scripts/export_trajectory.py").read_text()
-    arrival_lines = [ln for ln in source.splitlines() if "env.goals[i]" in ln or "altitudes[i]" in ln]
-    joined = "\n".join(arrival_lines)
-    assert joined.count("altitudes[i]") >= 2, (
-        "both the per-frame flag and the run total must require altitude zero"
+    spec = importlib.util.spec_from_file_location(
+        "export_trajectory", Path("scripts/export_trajectory.py")
     )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.rollout(_ScriptedEnv(path, goal), _Idle(), seed=0, record=True)
+
+
+def test_a_drone_that_lands_and_stays_counts_as_arrived():
+    out = _score([(0, 0, 0), (1, 0, 0), (2, 0, 0), (2, 0, 0)], goal=(2, 0))
+    assert out["arrived"] == 1
+    assert out["bounced"] == 0
+
+
+def test_a_drone_that_leaves_its_goal_does_not_count_even_if_it_drifts_back():
+    """The rule the viewer now enforces, and why.
+
+    Standing on the goal at the final step is not the same as having learned to
+    hold station. On the four drone board the six thousand episode checkpoint
+    scored a full fleet home while one drone landed and departed four separate
+    times, and it read identically to the checkpoint that simply lands and
+    stops. Occupying is reported separately so the gap stays visible.
+    """
+    out = _score([(0, 0, 0), (2, 0, 0), (1, 0, 0), (2, 0, 0)], goal=(2, 0))
+    assert out["occupying"] == 1, "it is standing on the goal at the end"
+    assert out["bounced"] == 1, "but it left once, so it never settled"
+    assert out["arrived"] == 0, "and a bouncing drone is not a success"
+
+
+def test_hovering_over_the_goal_is_not_arrival():
+    out = _score([(0, 0, 0), (2, 0, 1), (2, 0, 1)], goal=(2, 0))
+    assert out["arrived"] == 0
+    assert out["occupying"] == 0
