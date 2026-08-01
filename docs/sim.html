@@ -218,7 +218,16 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-const PALETTE = [0xe8ebe9, 0xb9c0bb, 0xd4dbd6, 0x9aa39d];
+// Eight tints for eight drones. The index wraps, so at four entries the eight
+// drone board drew two identical fleets and drone 0 was indistinguishable from
+// drone 4, which is the one thing a viewer of a coordination task must not do.
+// Separation is carried by lightness with only a slight cool drift, because
+// green is spoken for by a drone that has arrived and warm is spoken for by the
+// untrained ghost; a saturated set here would collide with both.
+const PALETTE = [
+  0xf1f4f2, 0xc9d2d5, 0xd4dbd6, 0xa4b1b7,
+  0xb9c0bb, 0x8d9aa3, 0x9aa39d, 0x77848c,
+];
 const GOAL_GREEN = 0x6faa85;
 const GHOST = 0x6b5f52;   // warm, so it never reads as a drone doing well
 

@@ -3,9 +3,10 @@
 The viewer draws whatever this writes and invents nothing, so every position and
 every number on screen came out of an actual episode.
 
-Two scenarios are exported, because the honest claim about this repository is a
-split one: the small profile learns and the multi-drone profile does not. Showing
-only one of them would be a choice about which half to hide.
+Every profile is exported rather than a chosen subset, because which ones are
+solved has changed more than once and picking a subset is a decision about what
+to hide. All five are solved now, so the split the viewer used to show is gone,
+but the rule stays: export them all and let the numbers say where each stands.
 
 Two kinds of evidence per scenario, and they answer different questions.
 
@@ -73,6 +74,17 @@ SCENARIOS = [
         "config": "configs/fly-fleet.yaml",
         "episodes": 30000,
         "blurb": "Four rows, one tunnel, so the routes converge and have to queue.",
+    },
+    {
+        "key": "fly-fleet8",
+        "name": "Eight drones, obstacle course",
+        "config": "configs/fly-fleet8.yaml",
+        # Twenty thousand and not more. This profile gets worse with additional
+        # training rather than merely stopping improving: the same settings
+        # taken to forty thousand fall back from every seed solving to four of
+        # five. The config header carries the measurements.
+        "episodes": 20000,
+        "blurb": "Eight drones, two tunnels, and enough exploration to stop them standing still.",
     },
 ]
 
