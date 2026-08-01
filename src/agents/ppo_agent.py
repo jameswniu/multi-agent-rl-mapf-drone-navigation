@@ -24,6 +24,67 @@ from integrity_validators import PolicyIntegrityValidator  # schema-based valida
 from utils.metrics import TRAINING_REWARD  # episode reward, for Prometheus
 
 
+class RunningNorm:
+    """Mean and variance of every return seen so far, updated in one pass.
+
+    Returns have to be rescaled before the critic regresses on them or the loss
+    is dominated by whichever reward term happens to be largest. Doing that per
+    batch is the obvious way and it is wrong here, because the batch is one
+    episode: subtracting that episode's own mean removes exactly the thing worth
+    knowing, which is whether this episode went better than episodes generally
+    go. Measured on the eight drone board, an episode bringing every drone home
+    returns +46.89 against -0.45 for one that strands a drone, and per-episode
+    normalisation shrinks that gap of 47.3 to 0.24.
+
+    It also gives the critic a target that stops moving. Under per-batch
+    normalisation the critic is asked to predict a z-score against a ruler that
+    is rebuilt from scratch every episode, so there is nothing stable to
+    converge to. That is worth naming because it is what made generalised
+    advantage estimation fail here: GAE bootstraps through the critic, so a
+    critic trained against a moving ruler poisons every advantage it touches.
+
+    Chan's parallel update, so a batch of any size folds in without keeping the
+    samples around.
+
+    ``horizon`` caps how much history that average is allowed to hold. Keeping
+    all of it sounds more principled and measurably is not: early training is
+    almost entirely failures, so an unbounded average keeps rescaling the
+    returns of a competent policy against a distribution that stopped being true
+    thousands of episodes ago, and the signal fades as the agent improves. On
+    the four drone course an unbounded normaliser stalls flat at half the fleet
+    home and never moves off it, at any budget out to 30000 episodes. Capping
+    the count keeps the statistics tracking the returns actually being earned.
+    """
+
+    def __init__(self, horizon=None):
+        self.mean = 0.0
+        self.var = 1.0
+        self.count = 1e-4
+        self.horizon = horizon
+
+    def update(self, values):
+        batch_count = values.numel()
+        if not batch_count:
+            return
+        batch_mean = float(values.mean())
+        batch_var = float(values.var(unbiased=False))
+        delta = batch_mean - self.mean
+        total = self.count + batch_count
+        self.mean += delta * batch_count / total
+        self.var = (
+            self.var * self.count
+            + batch_var * batch_count
+            + delta * delta * self.count * batch_count / total
+        ) / total
+        # Forgetting is the whole point of the cap: holding the count at the
+        # horizon makes each new batch keep a fixed share of the average rather
+        # than a share that shrinks to nothing as training goes on.
+        self.count = min(total, self.horizon) if self.horizon else total
+
+    def normalize(self, values):
+        return (values - self.mean) / (self.var**0.5 + 1e-8)
+
+
 # ---------------- Policy Network ----------------
 
 class PPOPolicy(nn.Module):
@@ -76,7 +137,8 @@ class PPOAgent:
     """
 
     def __init__(self, env, lr=3e-4, gamma=0.99, eps_clip=0.2, epochs=3, action_masking=None,
-                 batch_episodes=None):
+                 batch_episodes=None, return_norm=None, norm_horizon=None,
+                 entropy_coef=None, entropy_final=None, anneal_episodes=None):
         self.env = env
         # Invalid action masking. The observation already reports which moves are
         # blocked, so a drone should never have to walk into a wall to find out.
@@ -102,6 +164,45 @@ class PPOAgent:
             batch_episodes = int(getattr(env, "config", {}).get("batch_episodes", 1))
         self.batch_episodes = max(1, int(batch_episodes))
 
+        # How returns are rescaled before the critic regresses on them. "batch"
+        # uses the current batch's own mean and variance, which is the usual
+        # choice and is safe when a batch holds many episodes. At a batch of one
+        # it erases the difference between a good episode and a bad one, and it
+        # hands the critic a target that is rescaled every episode; see
+        # RunningNorm for the measurement.
+        if return_norm is None:
+            return_norm = str(getattr(env, "config", {}).get("return_norm", "batch"))
+        if return_norm not in ("batch", "running"):
+            raise ValueError(f"return_norm must be 'batch' or 'running', got {return_norm!r}")
+        self.return_norm = return_norm
+        if norm_horizon is None:
+            norm_horizon = getattr(env, "config", {}).get("norm_horizon", 100000)
+        self.norm_horizon = int(norm_horizon) or None
+        self._returns = RunningNorm(self.norm_horizon) if return_norm == "running" else None
+
+        # Weight on the entropy term. The default 0.01 is the usual starting
+        # point and is not always enough here: a drone that has learned to yield
+        # in a crowd can collapse onto hovering, and once hover holds most of
+        # the probability mass sampling stops trying anything else, so the
+        # collapse maintains itself. Measured on the eight drone board, the
+        # stranded drone sat on hover at 0.83 against 0.17 for the move that
+        # would have freed it.
+        if entropy_coef is None:
+            entropy_coef = float(getattr(env, "config", {}).get("entropy_coef", 0.01))
+        self.entropy_coef = float(entropy_coef)
+
+        # Optional decay of that weight over training. Exploration and sharpness
+        # are wanted at different times rather than at once: enough noise early
+        # to break out of a bad habit, and little enough late that the greedy
+        # policy the evaluation actually runs is decisive. Holding one value for
+        # the whole run has to compromise between the two. Left equal to
+        # entropy_coef, nothing anneals and the behaviour is unchanged.
+        if entropy_final is None:
+            entropy_final = getattr(env, "config", {}).get("entropy_final", None)
+        self.entropy_final = float(entropy_final) if entropy_final is not None else self.entropy_coef
+        self.anneal_episodes = int(anneal_episodes) if anneal_episodes else 0
+        self._episodes_seen = 0
+
         # One row of features per drone, and the same move set for each. The
         # policy weights are shared across drones: a single trunk is applied to
         # every row, so the network size does not grow with the fleet and a
@@ -126,6 +227,18 @@ class PPOAgent:
 
         # Attach validator for drift/hallucination checks
         self.validator = PolicyIntegrityValidator(env.action_space)
+
+    def _entropy_weight(self):
+        """Entropy weight for the update about to be applied.
+
+        Interpolates on episodes seen so far rather than on updates, so the
+        schedule does not silently change shape when the batch size does.
+        """
+        if not self.anneal_episodes or self.entropy_final == self.entropy_coef:
+            return self.entropy_coef
+        progress = min(1.0, self._episodes_seen / self.anneal_episodes)
+        return self.entropy_coef + (self.entropy_final - self.entropy_coef) * progress
+
 
     def _features(self, state):
         """Turn a raw observation into what the network actually consumes.
@@ -292,6 +405,7 @@ class PPOAgent:
         """
         pending = []
         for ep in range(num_episodes):
+            self._episodes_seen += 1
             state, _ = self.env.reset()
             log_probs, rewards, states, actions = [], [], [], []
             terminated, truncated = False, False
@@ -349,7 +463,14 @@ class PPOAgent:
             # and every weight in the network is permanently poisoned, which
             # looks from the outside like a policy that silently stopped
             # learning rather than like a crash.
-            if discounted.numel() > 1:
+            if self._returns is not None:
+                # Fold this batch in first, then rescale by the statistics of
+                # every return seen so far. A single sample is fine here, which
+                # is why this branch carries no size guard: the running variance
+                # is never the nan that an unbiased std of one value would give.
+                self._returns.update(discounted)
+                discounted = self._returns.normalize(discounted)
+            elif discounted.numel() > 1:
                 discounted = (discounted - discounted.mean()) / (discounted.std() + 1e-8)
 
             for _ in range(self.epochs):
@@ -384,7 +505,7 @@ class PPOAgent:
 
                 loss = -torch.min(surr1, surr2).mean() \
                        + 0.5 * value_loss.mean() \
-                       - 0.01 * entropy
+                       - self._entropy_weight() * entropy
 
                 self.optimizer.zero_grad()
                 loss.backward()
