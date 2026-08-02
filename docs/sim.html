@@ -178,6 +178,7 @@
   <button class="vbtn" type="button" data-view="x" title="Side elevation, along the x axis">X</button>
   <button class="vbtn" type="button" data-view="y" title="Side elevation, along the y axis">Y</button>
   <button class="vbtn" type="button" data-view="z" title="Top down">Z</button>
+  <button class="vbtn" type="button" data-view="r" title="Back to the arrival view">R</button>
 </div>
 
 <header>
@@ -557,9 +558,22 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.06;
 controls.maxPolarAngle = Math.PI * 0.49;
-// Half-speed dolly so a wheel tick is a step, not a leap; with the distance
-// clamps below, zoom reads as a smooth range instead of two extremes.
-controls.zoomSpeed = 0.5;
+// The library treats every wheel event as one fixed dolly step, and an
+// inertial scroll fires dozens of events, so a flick shot the camera from one
+// clamp to the other and zoom felt like two settings. The wheel now only moves
+// a TARGET distance, scaled by the actual scroll amount, and the frame loop
+// eases toward it, so any framing between the clamps is reachable and holds.
+controls.enableZoom = false;
+let HOME_POS = null;
+let zoomTarget = null;
+renderer.domElement.addEventListener('wheel', e => {
+  e.preventDefault();
+  const offset = camera.position.clone().sub(controls.target);
+  if (zoomTarget === null) zoomTarget = offset.length();
+  zoomTarget = THREE.MathUtils.clamp(
+    zoomTarget * Math.pow(1.0007, e.deltaY),
+    controls.minDistance, controls.maxDistance);
+}, { passive: false });
 // The scene holds still until touched. The hint chip carries the invitation
 // to drag and scroll, and retires on the first touch or its own timeout.
 function endAutoOrbit() {
@@ -581,7 +595,9 @@ let camTween = null;
 function flyTo(view) {
   if (!S) return;
   endAutoOrbit();
-  camTween = { from: camera.position.clone(), to: VIEW_POS[view](S.gridSize), t: 0 };
+  zoomTarget = null;                               // a flight owns the distance
+  const dest = view === 'r' ? HOME_POS.clone() : VIEW_POS[view](S.gridSize);
+  camTween = { from: camera.position.clone(), to: dest, t: 0 };
 }
 document.querySelectorAll('.vbtn').forEach(b =>
   b.addEventListener('click', () => flyTo(b.dataset.view)));
@@ -651,6 +667,7 @@ function buildScene(sc) {
   // sky dome's horizon band so ground haze blends into sky.
   scene.fog = new THREE.Fog(FOG_DUSK, N * 2.2, N * 5.0);
   camera.position.set(N * 0.80, N * 0.92, N * 1.12);
+  HOME_POS = camera.position.clone();
   controls.target.set(0, -0.7, 0);
   controls.minDistance = N * 0.95;   // closest: the board still fills the frame
   controls.maxDistance = N * 2.2;    // farthest: the board never shrinks into the fog
@@ -1206,6 +1223,12 @@ renderer.setAnimationLoop(now => {
       : 1 - Math.pow(-2 * camTween.t + 2, 2) / 2;   // ease in-out
     camera.position.lerpVectors(camTween.from, camTween.to, e2);
     if (camTween.t >= 1) camTween = null;
+  }
+  if (zoomTarget !== null && !camTween) {
+    const offset = camera.position.clone().sub(controls.target);
+    const dist = offset.length();
+    const eased = THREE.MathUtils.lerp(dist, zoomTarget, Math.min(1, dt * 8));
+    camera.position.copy(controls.target).addScaledVector(offset.normalize(), eased);
   }
   controls.update();
   updateOcclusion(dt);      // after controls, so the camera is where it will render from
