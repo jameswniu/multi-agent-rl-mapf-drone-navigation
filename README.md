@@ -152,7 +152,7 @@ Three earlier fixes are load-bearing underneath all of this, each also found by 
 
 <div align="center">
   <a href="https://jameswniu.github.io/multi-agent-rl-mapf-drone-navigation/sim.html">
-    <img src="assets/sim-preview.png" alt="Browser viewer: four drones on an eight by eight grid, one of them green because it has reached its goal, with wireframe ghosts showing where the untrained policy was at the same step, obstacles as raised blocks, goals as flat green pads, and a learning curve with a shaded seed band" width="100%">
+    <img src="assets/sim-preview.png" alt="Browser viewer: a dusk city block where eight quadcopter drones have landed green on their helipads, towers with lit windows standing between them, wireframe ghost drones showing where the untrained policy stalled, and a learning curve with a shaded seed band" width="100%">
   </a>
   <br>
   <a href="https://jameswniu.github.io/multi-agent-rl-mapf-drone-navigation/sim.html"><b>Open the viewer</b></a>
