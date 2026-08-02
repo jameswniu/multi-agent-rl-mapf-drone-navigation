@@ -140,6 +140,19 @@
   }
   .swatch { display: inline-block; width: 10px; height: 10px; margin-right: 8px; vertical-align: baseline; }
 
+  #viewBtns {
+    position: fixed; top: 18px; left: 50%; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 6px; z-index: 3;
+    background: rgba(12,15,14,0.78); border: 1px solid var(--border); padding: 6px 10px;
+  }
+  #viewBtns .vlab { font-size: 11px; letter-spacing: 2px; color: var(--dim); margin-right: 4px; }
+  .vbtn {
+    appearance: none; background: var(--bg-chip); border: 1px solid var(--border);
+    color: var(--text); font: inherit; font-size: 12px; width: 30px; height: 26px; cursor: pointer;
+  }
+  .vbtn:hover { border-color: var(--green); background: #202c23; }
+  .vbtn:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+
   #orbitHint {
     position: fixed; left: 50%; bottom: 108px; transform: translateX(-50%);
     padding: 8px 16px; background: rgba(12,15,14,0.78); border: 1px solid var(--border);
@@ -159,6 +172,12 @@
 
 <div id="stage"></div>
 <div id="orbitHint" class="mono">DRAG TO ORBIT &middot; SCROLL TO ZOOM</div>
+<div id="viewBtns" class="mono" role="group" aria-label="Camera views">
+  <span class="vlab">VIEW</span>
+  <button class="vbtn" type="button" data-view="x" title="Side elevation, along the x axis">X</button>
+  <button class="vbtn" type="button" data-view="y" title="Side elevation, along the y axis">Y</button>
+  <button class="vbtn" type="button" data-view="z" title="Top down">Z</button>
+</div>
 
 <header>
   <p class="eyebrow mono">RECORDED ROLLOUTS / NOTHING SIMULATED IN THE BROWSER</p>
@@ -470,6 +489,24 @@ function endAutoOrbit() {
 }
 renderer.domElement.addEventListener('pointerdown', endAutoOrbit, { once: true });
 renderer.domElement.addEventListener('wheel', endAutoOrbit, { once: true, passive: true });
+
+// Three canonical views, one per axis, Z straight down. Buttons fly the camera
+// there over a beat rather than teleporting it, and any manual grab cancels the
+// flight: the user always outranks the tour guide.
+const VIEW_POS = {
+  x: n => new THREE.Vector3(n * 1.55, n * 0.55, 0),
+  y: n => new THREE.Vector3(0, n * 0.55, n * 1.55),
+  z: n => new THREE.Vector3(0, n * 1.9, 0.001),   // epsilon keeps the controls stable straight down
+};
+let camTween = null;
+function flyTo(view) {
+  if (!S) return;
+  endAutoOrbit();
+  camTween = { from: camera.position.clone(), to: VIEW_POS[view](S.gridSize), t: 0 };
+}
+document.querySelectorAll('.vbtn').forEach(b =>
+  b.addEventListener('click', () => flyTo(b.dataset.view)));
+renderer.domElement.addEventListener('pointerdown', () => { camTween = null; });
 setTimeout(() => { const h = document.getElementById('orbitHint'); if (h) h.style.opacity = '0'; }, 12000);
 
 // Dusk: cool sky bounce, one warm low sun that casts every shadow, and a faint
@@ -1074,6 +1111,14 @@ renderer.setAnimationLoop(now => {
   }
   paint();
   updateFleetMotion(dt, now);   // after paint: eases toward the targets it just set
+  if (camTween) {
+    camTween.t = Math.min(1, camTween.t + dt / 0.6);
+    const e2 = camTween.t < 0.5
+      ? 2 * camTween.t * camTween.t
+      : 1 - Math.pow(-2 * camTween.t + 2, 2) / 2;   // ease in-out
+    camera.position.lerpVectors(camTween.from, camTween.to, e2);
+    if (camTween.t >= 1) camTween = null;
+  }
   controls.update();
   updateOcclusion(dt);      // after controls, so the camera is where it will render from
   renderer.render(scene, camera);
