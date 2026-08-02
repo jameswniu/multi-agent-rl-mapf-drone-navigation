@@ -9,6 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Eight drones on the 8x8 obstacle course, solved: 10 of 10 seeds bring every
+  drone home and hold, in 21 steps against a best-found central plan of 17.
+  The fix was exploration, `entropy_coef: 0.06` on that profile alone, after
+  feasibility, congestion, geometry, longer training, curriculum transfer and
+  epoch count were each measured and ruled out; the negative results live in
+  `configs/fly-fleet8.yaml`.
+- Arrival now means arrived and stayed. A drone that leaves a goal it reached
+  is disqualified for the episode, shown amber in the viewer, and counted
+  separately as occupying; end-of-run labels, live readout, and board colors
+  all answer the same question.
+- `scripts/plan_optimum.py`: space-time A* over prioritised orderings, the
+  feasibility bound the learned policies are measured against.
+- Browser viewer rebuilt as an industrial yard flown by a real drone model
+  (VR Drone by Dave404, CC-BY, with a procedural quadcopter as fallback):
+  runtime canvas textures, sun shadows, occlusion fade kept, helipads with
+  owner rings, X, Y, Z and Default camera flights, eased continuous zoom.
+  The dusk-city variant is preserved on the `viewer-city-b` branch.
+- README landing: recorded eight-drone rollout as a looping inline animation,
+  plus stills shot from the shipped build.
+- Opt-in training knobs, off by default and measured before shelving: running
+  return normalisation with a forgetting horizon, entropy annealing.
+
 - Multiple drones sharing one grid, sized by `num_drones`, with shared policy weights.
 - Path finding: vertex, swap and stationary conflicts detected and refused each step.
 - Obstacles drawn from `obstacle_density`, with four local sensor flags per drone.
