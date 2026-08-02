@@ -45,11 +45,12 @@
   header {
     position: fixed;
     top: 0; left: 0; right: 0;
-    padding: 18px 22px 22px;
-    background: linear-gradient(to bottom, rgba(7,11,8,0.94), rgba(7,11,8,0));
+    padding: 18px 22px 30px;
+    background: linear-gradient(to bottom, rgba(13,16,18,0.96), rgba(13,16,18,0.6) 60%, rgba(13,16,18,0));
     pointer-events: none;
     z-index: 2;
   }
+  header h1, header .sub, header .eyebrow { text-shadow: 0 1px 8px rgba(0,0,0,0.75); }
   .eyebrow {
     font-size: 12.5px; font-weight: 700; letter-spacing: 3.2px;
     color: var(--green); margin: 0 0 8px;
@@ -65,7 +66,7 @@
   }
   .rail-label {
     font-size: 12.5px; letter-spacing: 2px; text-transform: uppercase;
-    color: var(--dim); margin: 0 0 6px;
+    color: #dfe4e7; margin: 0 0 6px; text-shadow: 0 1px 6px rgba(0,0,0,0.65);
   }
 
   .stack { display: flex; flex-direction: column; gap: 1px; background: var(--border); border: 1px solid var(--border); }
@@ -224,10 +225,11 @@
   <div><span class="swatch" style="background:#6faa85"></span>arrived at its goal</div>
   <div><span class="swatch" style="background:#c8a06a"></span>left a goal and came back, not counted</div>
   <div><span class="swatch" style="background:#6b5f52"></span>untrained ghost</div>
-  <div><span class="swatch" style="background:#3d443f;border:1px solid #6faa85"></span>low roof, can be flown over</div>
-  <div><span class="swatch" style="background:#262b2e"></span>tower, must be gone around</div>
-  <div><span class="swatch" style="background:#4a4440"></span>underpass, ground only</div>
+  <div><span class="swatch" style="background:#3d443f;border:1px solid #6faa85"></span>container, can be flown over</div>
+  <div><span class="swatch" style="background:#262b2e"></span>warehouse, must be gone around</div>
+  <div><span class="swatch" style="background:#4a4440"></span>loading bay, ground only</div>
   <div style="margin-top:6px;color:#8b938e">drag to orbit, scroll to zoom</div>
+  <div style="margin-top:2px;color:#6f7773;font-size:11.5px">drone model: <a href="https://poly.pizza/m/580fbWUqqbh" style="color:#6f7773">VR Drone by Dave404</a>, CC-BY</div>
 </div>
 
 <div id="transport" class="panel">
@@ -249,6 +251,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 // Eight tints for eight drones. The index wraps, so at four entries the eight
 // drone board drew two identical fleets and drone 0 was indistinguishable from
@@ -270,9 +273,10 @@ const GHOST = 0x6b5f52;   // warm, so it never reads as a drone doing well
 // Dusk palette for the city. The fog color is matched to the sky dome's horizon
 // band so ground haze blends into sky instead of drawing a seam, and the window
 // glow is warm against the cool dusk so lit towers read at a glance.
-const SKY_TOP = 0x0a1016;
-const FOG_DUSK = 0x262320;
-const WINDOW_GLOW = 0xffd9a0;
+const SKY_TOP = 0x24282c;
+const FOG_DUSK = 0x43484c;
+const WINDOW_GLOW = 0xcfe3f5;   // fluorescent, not incandescent
+const CONTAINER_TINTS = [0x8a4a3a, 0x3f5a70, 0x4a6a4f, 0x6a6a5f];
 
 // Flight height scales with the board. A fixed height that looked right on the
 // 8x8 left the drones visibly detached above the much smaller 5x5.
@@ -319,52 +323,79 @@ function facade(base, seed) {
     g.fillStyle = base; g.fillRect(0, 0, w, h);
     let s = seed >>> 0;
     const rnd = () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296;
-    const cols = 6, rows = 12, cw = w / cols, ch = h / rows;
-    for (let r = 0; r < rows; r++) for (let c2 = 0; c2 < cols; c2++) {
-      const lit = rnd() < 0.35;                       // a third of the offices working late
-      g.fillStyle = lit ? (rnd() < 0.8 ? '#ffc98a' : '#ffe9c9') : '#141a1f';
-      g.fillRect(c2 * cw + cw * 0.22, r * ch + ch * 0.25, cw * 0.56, ch * 0.5);
+    for (let x = 0; x < w; x += 8) {                  // corrugated ribbing
+      g.fillStyle = x % 16 ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.14)';
+      g.fillRect(x, 0, 4, h);
     }
-    g.fillStyle = 'rgba(0,0,0,0.35)';                 // darker lobby band at street level
-    g.fillRect(0, h - ch, w, ch);
+    g.fillStyle = '#20262b';                          // clerestory band
+    g.fillRect(0, 14, w, 26);
+    for (let c2 = 0; c2 < 6; c2++) {                  // a few lit panes up top
+      g.fillStyle = rnd() < 0.4 ? '#aebfcd' : '#272e34';
+      g.fillRect(c2 * (w / 6) + 4, 18, w / 6 - 8, 18);
+    }
+    g.fillStyle = 'rgba(0,0,0,0.30)';                 // grime line at the apron
+    g.fillRect(0, h - 18, w, 18);
+    g.fillStyle = 'rgba(38,42,46,0.9)';               // roller door, kept quiet
+    g.strokeStyle = 'rgba(0,0,0,0.45)';
+    g.fillRect(w * 0.3, h - 74, w * 0.4, 56);
+    g.strokeRect(w * 0.3, h - 74, w * 0.4, 56);
+    g.fillStyle = 'rgba(255,255,255,0.05)';           // door slats
+    for (let y = h - 70; y < h - 22; y += 8) g.fillRect(w * 0.3 + 2, y, w * 0.4 - 4, 3);
   });
 }
 
 const TEX = {
-  wall: [facade('#23282e', 11), facade('#2b3034', 47), facade('#262e2c', 83)],
+  wall: [facade('#3f454a', 11), facade('#45423d', 47), facade('#3d4449', 83)],
   roof: makeTex(128, 128, (g, w, h) => {
-    g.fillStyle = '#383d40'; g.fillRect(0, 0, w, h);
-    g.strokeStyle = '#2c3033'; g.lineWidth = 6; g.strokeRect(3, 3, w - 6, h - 6);
-    g.fillStyle = '#4a5054';                          // rooftop plant: AC units, a vent run
-    g.fillRect(18, 22, 34, 24); g.fillRect(70, 64, 30, 30); g.fillRect(24, 78, 20, 12);
-    g.fillStyle = '#2f3336';
-    g.fillRect(18, 42, 34, 4); g.fillRect(70, 90, 30, 4);
+    g.fillStyle = '#565b5e'; g.fillRect(0, 0, w, h);
+    for (let x = 0; x < w; x += 10) {                 // roof ribbing
+      g.fillStyle = x % 20 ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.12)';
+      g.fillRect(x, 0, 5, h);
+    }
+    g.fillStyle = '#76838c';                          // skylight strips, low key
+    g.fillRect(14, 18, 100, 10); g.fillRect(14, 62, 100, 10); g.fillRect(14, 104, 100, 10);
   }),
   deckWall: makeTex(128, 64, (g, w, h) => {
-    g.fillStyle = '#3b3f41'; g.fillRect(0, 0, w, h);
-    g.fillStyle = '#484d50'; g.fillRect(0, 0, w, 10); // edge beam
-    g.fillStyle = 'rgba(0,0,0,0.25)';
-    for (let x = 10; x < w; x += 24) g.fillRect(x, 14, 3, h - 18);  // pillar shadows
+    g.fillStyle = '#8f9296'; g.fillRect(0, 0, w, h);  // grayscale; per-cell tint colors it
+    for (let x = 0; x < w; x += 10) {                 // container corrugation
+      g.fillStyle = x % 20 ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.22)';
+      g.fillRect(x, 2, 5, h - 4);
+    }
+    g.strokeStyle = 'rgba(0,0,0,0.45)'; g.lineWidth = 2;
+    g.strokeRect(1, 1, w - 2, h - 2);
+    g.fillStyle = 'rgba(0,0,0,0.35)';                 // door seam and hinges
+    g.fillRect(w - 26, 4, 2, h - 8); g.fillRect(w - 14, 4, 2, h - 8);
   }),
   deckTop: makeTex(128, 128, (g, w, h) => {
-    g.fillStyle = '#26292b'; g.fillRect(0, 0, w, h);
-    g.strokeStyle = 'rgba(230,230,220,0.5)'; g.lineWidth = 3;
-    for (let x = 18; x < w; x += 22) {                // parking stalls
-      g.beginPath(); g.moveTo(x, 16); g.lineTo(x, h - 16); g.stroke();
+    g.fillStyle = '#84878b'; g.fillRect(0, 0, w, h);  // grayscale; tinted per cell
+    for (let y = 0; y < h; y += 10) {                 // roof corrugation
+      g.fillStyle = y % 20 ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.18)';
+      g.fillRect(2, y, w - 4, 5);
     }
-    g.strokeRect(6, 6, w - 12, h - 12);
+    g.strokeStyle = 'rgba(0,0,0,0.45)'; g.lineWidth = 3;
+    g.strokeRect(2, 2, w - 4, h - 4);
   }),
   // One street cell; RepeatWrapping tiles it into the whole grid, which is what
   // replaced the GridHelper: the lane paint IS the grid now.
   asphalt: makeTex(256, 256, (g, w, h) => {
-    g.fillStyle = '#1c1f22'; g.fillRect(0, 0, w, h);
-    for (let i = 0; i < 420; i++) {                   // aggregate speckle
-      g.fillStyle = `rgba(${180 + Math.floor(Math.random() * 60)},${180 + Math.floor(Math.random() * 60)},170,${(Math.random() * 0.07 + 0.02).toFixed(3)})`;
-      g.fillRect(Math.random() * w, Math.random() * h, 1.6, 1.6);
+    g.fillStyle = '#43474a'; g.fillRect(0, 0, w, h);  // poured concrete
+    for (let i = 0; i < 380; i++) {
+      g.fillStyle = `rgba(20,20,22,${(Math.random() * 0.10 + 0.02).toFixed(3)})`;
+      g.fillRect(Math.random() * w, Math.random() * h, 2, 2);
     }
-    g.strokeStyle = 'rgba(215,215,200,0.20)'; g.lineWidth = 3;
+    for (let i = 0; i < 3; i++) {                     // tire scuffs
+      g.strokeStyle = 'rgba(25,25,28,0.25)'; g.lineWidth = 5;
+      g.beginPath();
+      g.arc(Math.random() * w, Math.random() * h, 40 + Math.random() * 50,
+            Math.random() * Math.PI, Math.random() * Math.PI + 1.2);
+      g.stroke();
+    }
+    g.strokeStyle = 'rgba(214,196,120,0.30)'; g.lineWidth = 3;   // yard lane paint
     g.setLineDash([16, 12]);
-    g.strokeRect(2, 2, w - 4, h - 4);                 // dashed cell border = lane paint
+    g.strokeRect(2, 2, w - 4, h - 4);
+    g.setLineDash([]);
+    g.strokeStyle = 'rgba(20,20,22,0.5)'; g.lineWidth = 2;       // expansion joints
+    g.beginPath(); g.moveTo(w / 2, 0); g.lineTo(w / 2, h); g.moveTo(0, h / 2); g.lineTo(w, h / 2); g.stroke();
   }, true),
   helipad: makeTex(128, 128, (g, w, h) => {
     g.fillStyle = 'rgba(8,12,10,0.88)';
@@ -379,18 +410,17 @@ const TEX = {
   hazard: makeTex(64, 32, (g, w, h) => {
     g.fillStyle = '#151312'; g.fillRect(0, 0, w, h);
     g.save(); g.translate(w / 2, h / 2); g.rotate(-Math.PI / 4);
-    g.fillStyle = '#8f7d4f';
+    g.fillStyle = '#d8b13c';
     for (let x = -w; x < w; x += 16) g.fillRect(x, -h, 8, h * 2);
     g.restore();
   }),
   sky: makeTex(512, 256, (g, w, h) => {
     const grad = g.createLinearGradient(0, 0, 0, h);
-    grad.addColorStop(0.00, '#0a1016');               // zenith
-    grad.addColorStop(0.42, '#141d24');
-    grad.addColorStop(0.52, '#2e2c29');
-    grad.addColorStop(0.60, '#5c4a3d');               // horizon band, kept quiet
-    grad.addColorStop(0.72, '#1f1b19');
-    grad.addColorStop(1.00, '#13100e');
+    grad.addColorStop(0.00, '#24282c');               // deep slate overcast
+    grad.addColorStop(0.45, '#383e43');
+    grad.addColorStop(0.58, '#4c5257');               // soft band above the horizon
+    grad.addColorStop(0.70, '#43484c');               // fog matches this line
+    grad.addColorStop(1.00, '#33373a');
     g.fillStyle = grad; g.fillRect(0, 0, w, h);
   }),
 };
@@ -405,8 +435,8 @@ const canopyGeo = shared(new THREE.BoxGeometry(0.18, 0.05, 0.26));
 const armGeo = shared(new THREE.BoxGeometry(0.86, 0.035, 0.06));
 const rotorGeo = shared(new THREE.CylinderGeometry(0.16, 0.16, 0.012, 12));
 const skidGeo = shared(new THREE.BoxGeometry(0.03, 0.03, 0.36));
-const ledGeo = shared(new THREE.SphereGeometry(0.035, 8, 6));
-const ringGeo = shared(new THREE.RingGeometry(0.10, 0.20, 24).rotateX(-Math.PI / 2));
+const ledGeo = shared(new THREE.SphereGeometry(0.05, 8, 6));
+const ringGeo = shared(new THREE.RingGeometry(0.13, 0.27, 24).rotateX(-Math.PI / 2));
 // The ghost is the same silhouette as the live craft, drawn only as lines: the
 // comparison stays drone-versus-same-drone-untrained, and a line drawing can
 // never be mistaken for a working unit.
@@ -424,6 +454,33 @@ const ghostGeo = shared(new THREE.EdgesGeometry(mergeGeometries([
 function buildDrone(tint) {
   const g = new THREE.Group();
   g.rotation.order = 'YXZ';                            // yaw, then pitch and roll
+  if (droneProto) {
+    const ledMat = new THREE.MeshBasicMaterial({ color: tint });
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: tint, transparent: true, opacity: 0.7, side: THREE.DoubleSide, depthWrite: false });
+    const model = droneProto.clone(true);
+    const bodyMats = [];
+    model.traverse(o => {
+      if (o.isMesh) {
+        o.material = o.material.clone();     // per drone, so status can tint it
+        bodyMats.push(o.material);
+      }
+    });
+    g.add(model);
+    g.userData.bodyMats = bodyMats;
+    const led = new THREE.Mesh(ledGeo, ledMat);
+    led.position.set(0, 0.16, -0.24);
+    g.add(led);
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.position.y = -0.10; ring.renderOrder = 3;
+    g.add(ring);
+    g.userData.statusMats = [ledMat, ringMat];
+    g.userData.rotors = [];                            // fused model: nothing to spin
+    g.userData.roll = 0; g.userData.pitch = 0;
+    g.userData.drop = 0; g.userData.spin = 1;
+    g.userData.bob = Math.random() * Math.PI * 2;
+    return g;
+  }
   const bodyMat = new THREE.MeshStandardMaterial({ color: 0x3a3f44, roughness: 0.45, metalness: 0.55 });
   const accentMat = new THREE.MeshStandardMaterial({
     color: tint, roughness: 0.35, metalness: 0.3, emissive: tint, emissiveIntensity: 0.28 });
@@ -467,6 +524,29 @@ function buildDrone(tint) {
   return g;
 }
 
+// The real thing: VR Drone by Dave404 (poly.pizza/m/580fbWUqqbh, CC-BY),
+// normalized to the cell scale. Its meshes are fused, so nothing on it can
+// spin; status still reads from the LED and glow ring added around it. If the
+// file is missing the procedural quad takes over rather than an empty sky.
+let droneProto = null;
+try {
+  const gltf = await new GLTFLoader().loadAsync('drone.glb');
+  const src = gltf.scene;
+  const box = new THREE.Box3().setFromObject(src);
+  const size = box.getSize(new THREE.Vector3());
+  src.scale.setScalar(0.62 / Math.max(size.x, size.z));
+  box.setFromObject(src);
+  const c9 = box.getCenter(new THREE.Vector3());
+  src.position.x -= c9.x; src.position.z -= c9.z;
+  src.position.y -= box.min.y + 0.12;               // belly just under the arms line
+  src.traverse(o => {
+    if (o.isMesh) { o.castShadow = true; if (o.geometry) o.geometry.userData.shared = true; }
+  });
+  droneProto = src;
+} catch (e) {
+  console.warn('drone.glb unavailable, using the procedural quad', e);
+}
+
 // Sky lives on the scene, not the board, so scenario switches never dispose it.
 const dome = new THREE.Mesh(
   new THREE.SphereGeometry(150, 24, 12),
@@ -508,17 +588,17 @@ document.querySelectorAll('.vbtn').forEach(b =>
 renderer.domElement.addEventListener('pointerdown', () => { camTween = null; });
 setTimeout(() => { const h = document.getElementById('orbitHint'); if (h) h.style.opacity = '0'; }, 12000);
 
-// Dusk: cool sky bounce, one warm low sun that casts every shadow, and a faint
-// cool rim so unlit faces do not vanish into the fog.
-scene.add(new THREE.HemisphereLight(0x3d4a58, 0x2b2018, 0.85));
-const sun = new THREE.DirectionalLight(0xf2c39a, 2.2);
-sun.position.set(14, 18, 8);
+// Overcast: a big soft skylight, one cool sun high through the cloud deck for
+// soft shadows, and a faint rim so container stacks keep their edges.
+scene.add(new THREE.HemisphereLight(0x8a939b, 0x3c3a36, 0.9));
+const sun = new THREE.DirectionalLight(0xe9eef3, 1.7);
+sun.position.set(10, 24, 6);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
 sun.shadow.bias = -0.0006;
 sun.shadow.normalBias = 0.02;
 scene.add(sun);
-const rim = new THREE.DirectionalLight(0x6f86aa, 0.5);
+const rim = new THREE.DirectionalLight(0xaab6c2, 0.35);
 rim.position.set(-10, 6, -10);
 scene.add(rim);
 
@@ -631,11 +711,12 @@ function buildScene(sc) {
     const geo = new THREE.BoxGeometry(0.88, tall, 0.88);
     let wall, roof;
     if (crossable) {
+      const tint = CONTAINER_TINTS[hz % CONTAINER_TINTS.length];
       wall = new THREE.MeshStandardMaterial({
-        map: TEX.deckWall, emissive: 0x2f4a3c, emissiveIntensity: 0.25,
-        roughness: 0.8, metalness: 0.15, transparent: true, opacity: 1 });
+        map: TEX.deckWall, color: tint, emissive: 0x2f4a3c, emissiveIntensity: 0.22,
+        roughness: 0.75, metalness: 0.3, transparent: true, opacity: 1 });
       roof = new THREE.MeshStandardMaterial({
-        map: TEX.deckTop, roughness: 0.9, metalness: 0.05, transparent: true, opacity: 1 });
+        map: TEX.deckTop, color: tint, roughness: 0.8, metalness: 0.25, transparent: true, opacity: 1 });
     } else {
       const wt = TEX.wall[hz % 3];
       // The same canvas is the albedo AND the emissive map, so only the lit
@@ -856,6 +937,14 @@ function paint() {
     for (const m of drones[d].userData.statusMats) {
       m.color.setHex(tint);
       if (m.emissive) { m.emissive.setHex(tint); m.emissiveIntensity = home ? 0.85 : 0.28; }
+    }
+    // The real model keeps its own paint; status glows THROUGH it. Quiet while
+    // en route, unmistakable when parked: a settled craft glows green, a
+    // bounced one amber, from the hull and not only the ring.
+    if (drones[d].userData.bodyMats) {
+      for (const m of drones[d].userData.bodyMats) {
+        if (m.emissive) { m.emissive.setHex(tint); m.emissiveIntensity = home ? 0.55 : 0.10; }
+      }
     }
 
     // Pose TARGETS come from the raw frame data, never from the eased mesh, so

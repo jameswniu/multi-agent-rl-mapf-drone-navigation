@@ -1,2 +1,6 @@
 multi-agent-rl-mapf-drone-navigation
 Copyright 2026 James Niu
+
+Third-party assets:
+The browser viewer (docs/sim.html) uses the "VR Drone" 3D model by Dave404,
+licensed CC-BY, from https://poly.pizza/m/580fbWUqqbh (docs/drone.glb).
