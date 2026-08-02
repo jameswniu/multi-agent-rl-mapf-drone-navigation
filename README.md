@@ -39,7 +39,7 @@ which separates <em>drift</em>, a number sliding out of its declared range, from
     <img src="assets/yard-flight.gif" alt="Recorded rollout replay: eight drones lift out of an industrial yard, thread between warehouses, and land one by one on their helipads" width="88%">
   </a>
   <br/>
-  <sub>A recorded eight-drone rollout, replayed in the <a href="https://jameswniu.github.io/multi-agent-rl-mapf-drone-navigation/sim.html">browser viewer</a>. Every position came out of a real episode; nothing is simulated on the page.</sub>
+  <i>A recorded eight-drone rollout, replayed in the <a href="https://jameswniu.github.io/multi-agent-rl-mapf-drone-navigation/sim.html">browser viewer</a>. Every position came out of a real episode; nothing is simulated on the page.</i>
 </p>
 
 ---
@@ -170,7 +170,7 @@ Three earlier fixes are load-bearing underneath all of this, each also found by 
   <img src="assets/viewer-topdown.png" width="49.5%" alt="Top-down plan view: the yard from straight above, drones queueing between the container rows toward their pads">
   <img src="assets/viewer-amber.png" width="49.5%" alt="End of a half-trained run: six drones parked green, one amber because it left its pad and came back, and the checkpoint list reading 1 bounced, 6 of 8 settled">
   <br/>
-  <sub>Left: the top-down view, where the queueing reads like a plan drawing. Right: a half-trained checkpoint; the amber drone landed, left, and came back, so it does not count. Drone model: <a href="https://poly.pizza/m/580fbWUqqbh">VR Drone by Dave404</a>, CC-BY.</sub>
+  <i>Left: the top-down view, where the queueing reads like a plan drawing. Right: a half-trained checkpoint; the amber drone landed, left, and came back, so it does not count. Drone model: <a href="https://poly.pizza/m/580fbWUqqbh">VR Drone by Dave404</a>, CC-BY.</i>
 </div>
 
 Both profiles, replayed at four points during training. Orbit with the mouse, scrub the timeline, switch scenario and checkpoint from the right, and leave the ghost on to see where the untrained policy was at the same step.
