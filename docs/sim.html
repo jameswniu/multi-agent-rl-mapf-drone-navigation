@@ -189,7 +189,7 @@
 <div id="hud">
   <div class="stat"><div class="k">Step</div><div class="v" id="s-step">0</div></div>
   <div class="stat"><div class="k">Reward</div><div class="v" id="s-reward">0</div></div>
-  <div class="stat"><div class="k">Settled</div><div class="v accent" id="s-goal">0</div></div>
+  <div class="stat"><div class="k">Settled now</div><div class="v accent" id="s-goal">0</div></div>
   <div class="stat"><div class="k">Refused</div><div class="v" id="s-refused">0</div></div>
 </div>
 
@@ -638,7 +638,12 @@ function selectScenario(idx) {
     + `<span class="mono">scripts/export_trajectory.py</span> recorded every position.`;
 
   document.querySelector('#rail .rail-label:nth-of-type(1)');
-  [...document.querySelectorAll('.rail-label')][1].textContent = `Checkpoint  ·  seed ${S.replaySeed}`;
+  // "at end" is load-bearing. This column reports the finished episode while
+  // the readout under the board reports the frame on screen, and with both
+  // merely labelled "settled" the two disagreeing looked like a defect. It was
+  // asked about three separate times before the wording changed.
+  [...document.querySelectorAll('.rail-label')][1].textContent =
+    `Checkpoint  ·  seed ${S.replaySeed}  ·  at end`;
 
   el('runs').innerHTML = '';
   S.runs.forEach((r, k) => {
