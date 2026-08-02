@@ -171,6 +171,7 @@ Three earlier fixes are load-bearing underneath all of this, each also found by 
   <img src="assets/viewer-amber.png" width="49.5%" alt="End of a half-trained run: six drones parked green, one amber because it left its pad and came back, and the checkpoint list reading 1 bounced, 6 of 8 settled">
   <br/>
   <i>Left: the top-down view, where the queueing reads like a plan drawing. Right: a half-trained checkpoint; the amber drone landed, left, and came back, so it does not count. Drone model: <a href="https://poly.pizza/m/580fbWUqqbh">VR Drone by Dave404</a>, CC-BY.</i>
+  <br/><br/>
 </div>
 
 Both profiles, replayed at four points during training. Orbit with the mouse, scrub the timeline, switch scenario and checkpoint from the right, and leave the ghost on to see where the untrained policy was at the same step.
