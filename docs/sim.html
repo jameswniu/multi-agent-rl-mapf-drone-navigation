@@ -477,13 +477,12 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.06;
 controls.maxPolarAngle = Math.PI * 0.49;
-// The scene orbits by itself until the first touch, which is how a viewer
-// discovers it CAN orbit; the hint chip says so in words. Both retire on the
-// first pointer or wheel, and the chip times out on its own regardless.
-controls.autoRotate = true;
-controls.autoRotateSpeed = 0.4;   // one lap every couple of minutes; a drift, not a spin
+// Half-speed dolly so a wheel tick is a step, not a leap; with the distance
+// clamps below, zoom reads as a smooth range instead of two extremes.
+controls.zoomSpeed = 0.5;
+// The scene holds still until touched. The hint chip carries the invitation
+// to drag and scroll, and retires on the first touch or its own timeout.
 function endAutoOrbit() {
-  controls.autoRotate = false;
   const h = document.getElementById('orbitHint');
   if (h) h.style.opacity = '0';
 }
@@ -573,8 +572,8 @@ function buildScene(sc) {
   scene.fog = new THREE.Fog(FOG_DUSK, N * 2.2, N * 5.0);
   camera.position.set(N * 0.80, N * 0.92, N * 1.12);
   controls.target.set(0, -0.7, 0);
-  controls.minDistance = N * 0.45;
-  controls.maxDistance = N * 3;
+  controls.minDistance = N * 0.95;   // closest: the board still fills the frame
+  controls.maxDistance = N * 2.2;    // farthest: the board never shrinks into the fog
   controls.update();
 
   // The sun's shadow camera hugs the board; a fixed ortho box sized for the
