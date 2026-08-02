@@ -151,6 +151,7 @@
     appearance: none; background: var(--bg-chip); border: 1px solid var(--border);
     color: var(--text); font: inherit; font-size: 12px; width: 30px; height: 26px; cursor: pointer;
   }
+  .vbtn-wide { width: auto; padding: 0 10px; }
   .vbtn:hover { border-color: var(--green); background: #202c23; }
   .vbtn:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
 
@@ -178,7 +179,7 @@
   <button class="vbtn" type="button" data-view="x" title="Side elevation, along the x axis">X</button>
   <button class="vbtn" type="button" data-view="y" title="Side elevation, along the y axis">Y</button>
   <button class="vbtn" type="button" data-view="z" title="Top down">Z</button>
-  <button class="vbtn" type="button" data-view="r" title="Back to the arrival view">R</button>
+  <button class="vbtn vbtn-wide" type="button" data-view="r" title="Back to the arrival view">Default</button>
 </div>
 
 <header>
