@@ -198,9 +198,9 @@
   <div><span class="swatch" style="background:#6faa85"></span>arrived at its goal</div>
   <div><span class="swatch" style="background:#c8a06a"></span>left a goal and came back, not counted</div>
   <div><span class="swatch" style="background:#6b5f52"></span>untrained ghost</div>
-  <div><span class="swatch" style="background:#2f4038;border:1px solid #6faa85"></span>low, can be flown over</div>
-  <div><span class="swatch" style="background:#232d27"></span>solid, must be gone around</div>
-  <div><span class="swatch" style="background:#3a4a42"></span>tunnel, ground only</div>
+  <div><span class="swatch" style="background:#3d443f;border:1px solid #6faa85"></span>low roof, can be flown over</div>
+  <div><span class="swatch" style="background:#262b2e"></span>tower, must be gone around</div>
+  <div><span class="swatch" style="background:#4a4440"></span>underpass, ground only</div>
   <div style="margin-top:6px;color:#8b938e">drag to orbit, scroll to zoom</div>
 </div>
 
@@ -222,6 +222,7 @@
 <script type="module">
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 // Eight tints for eight drones. The index wraps, so at four entries the eight
 // drone board drew two identical fleets and drone 0 was indistinguishable from
@@ -240,6 +241,13 @@ const GOAL_GREEN = 0x6faa85;
 const BOUNCED_AMBER = 0xc8a06a;
 const GHOST = 0x6b5f52;   // warm, so it never reads as a drone doing well
 
+// Dusk palette for the city. The fog color is matched to the sky dome's horizon
+// band so ground haze blends into sky instead of drawing a seam, and the window
+// glow is warm against the cool dusk so lit towers read at a glance.
+const SKY_TOP = 0x0a1016;
+const FOG_DUSK = 0x2a2723;
+const WINDOW_GLOW = 0xffd9a0;
+
 // Flight height scales with the board. A fixed height that looked right on the
 // 8x8 left the drones visibly detached above the much smaller 5x5.
 let FLY = 1.0;
@@ -249,25 +257,213 @@ const data = await (await fetch('trajectory.json')).json();
 
 /* scene */
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x070b08);
+scene.background = new THREE.Color(SKY_TOP);   // behind the dome's poles
 
 const camera = new THREE.PerspectiveCamera(46, innerWidth / innerHeight, 0.1, 240);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.22;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 el('stage').appendChild(renderer.domElement);
+
+/* shared assets: textures and drone parts, built once and reused everywhere.
+   Everything is painted onto canvases at runtime, so the page stays a single
+   file with zero downloads beyond the library itself, and the scene still gets
+   real surfaces: lit tower windows, an asphalt street grid, helipads. */
+
+function makeTex(w, h, draw, repeat) {
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  if (repeat) t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return t;
+}
+
+// Facades are seeded, not random: the same variant paints the same windows on
+// every rebuild, so switching scenarios never reshuffles the skyline.
+function facade(base, seed) {
+  return makeTex(128, 256, (g, w, h) => {
+    g.fillStyle = base; g.fillRect(0, 0, w, h);
+    let s = seed >>> 0;
+    const rnd = () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296;
+    const cols = 6, rows = 12, cw = w / cols, ch = h / rows;
+    for (let r = 0; r < rows; r++) for (let c2 = 0; c2 < cols; c2++) {
+      const lit = rnd() < 0.35;                       // a third of the offices working late
+      g.fillStyle = lit ? (rnd() < 0.8 ? '#ffc98a' : '#ffe9c9') : '#141a1f';
+      g.fillRect(c2 * cw + cw * 0.22, r * ch + ch * 0.25, cw * 0.56, ch * 0.5);
+    }
+    g.fillStyle = 'rgba(0,0,0,0.35)';                 // darker lobby band at street level
+    g.fillRect(0, h - ch, w, ch);
+  });
+}
+
+const TEX = {
+  wall: [facade('#23282e', 11), facade('#2b3034', 47), facade('#262e2c', 83)],
+  roof: makeTex(128, 128, (g, w, h) => {
+    g.fillStyle = '#383d40'; g.fillRect(0, 0, w, h);
+    g.strokeStyle = '#2c3033'; g.lineWidth = 6; g.strokeRect(3, 3, w - 6, h - 6);
+    g.fillStyle = '#4a5054';                          // rooftop plant: AC units, a vent run
+    g.fillRect(18, 22, 34, 24); g.fillRect(70, 64, 30, 30); g.fillRect(24, 78, 20, 12);
+    g.fillStyle = '#2f3336';
+    g.fillRect(18, 42, 34, 4); g.fillRect(70, 90, 30, 4);
+  }),
+  deckWall: makeTex(128, 64, (g, w, h) => {
+    g.fillStyle = '#3b3f41'; g.fillRect(0, 0, w, h);
+    g.fillStyle = '#484d50'; g.fillRect(0, 0, w, 10); // edge beam
+    g.fillStyle = 'rgba(0,0,0,0.25)';
+    for (let x = 10; x < w; x += 24) g.fillRect(x, 14, 3, h - 18);  // pillar shadows
+  }),
+  deckTop: makeTex(128, 128, (g, w, h) => {
+    g.fillStyle = '#26292b'; g.fillRect(0, 0, w, h);
+    g.strokeStyle = 'rgba(230,230,220,0.5)'; g.lineWidth = 3;
+    for (let x = 18; x < w; x += 22) {                // parking stalls
+      g.beginPath(); g.moveTo(x, 16); g.lineTo(x, h - 16); g.stroke();
+    }
+    g.strokeRect(6, 6, w - 12, h - 12);
+  }),
+  // One street cell; RepeatWrapping tiles it into the whole grid, which is what
+  // replaced the GridHelper: the lane paint IS the grid now.
+  asphalt: makeTex(256, 256, (g, w, h) => {
+    g.fillStyle = '#1c1f22'; g.fillRect(0, 0, w, h);
+    for (let i = 0; i < 420; i++) {                   // aggregate speckle
+      g.fillStyle = `rgba(${180 + Math.floor(Math.random() * 60)},${180 + Math.floor(Math.random() * 60)},170,${(Math.random() * 0.07 + 0.02).toFixed(3)})`;
+      g.fillRect(Math.random() * w, Math.random() * h, 1.6, 1.6);
+    }
+    g.strokeStyle = 'rgba(215,215,200,0.20)'; g.lineWidth = 3;
+    g.setLineDash([16, 12]);
+    g.strokeRect(2, 2, w - 4, h - 4);                 // dashed cell border = lane paint
+  }, true),
+  helipad: makeTex(128, 128, (g, w, h) => {
+    g.fillStyle = 'rgba(8,12,10,0.88)';
+    g.beginPath(); g.arc(64, 64, 56, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = '#6faa85'; g.lineWidth = 6;       // GOAL_GREEN paint, so goals still read green
+    g.beginPath(); g.arc(64, 64, 44, 0, Math.PI * 2); g.stroke();
+    g.fillStyle = '#6faa85';
+    g.font = 'bold 52px ui-monospace, Menlo, monospace';
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText('H', 64, 66);
+  }),
+  hazard: makeTex(64, 32, (g, w, h) => {
+    g.fillStyle = '#151312'; g.fillRect(0, 0, w, h);
+    g.save(); g.translate(w / 2, h / 2); g.rotate(-Math.PI / 4);
+    g.fillStyle = '#d8b13c';
+    for (let x = -w; x < w; x += 16) g.fillRect(x, -h, 8, h * 2);
+    g.restore();
+  }),
+  sky: makeTex(512, 256, (g, w, h) => {
+    const grad = g.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0.00, '#0a1016');               // zenith
+    grad.addColorStop(0.42, '#16222b');
+    grad.addColorStop(0.52, '#3f3a35');
+    grad.addColorStop(0.60, '#8a5a3c');               // horizon band the fog matches
+    grad.addColorStop(0.72, '#241f1c');
+    grad.addColorStop(1.00, '#15100d');
+    g.fillStyle = grad; g.fillRect(0, 0, w, h);
+  }),
+};
+
+// Drone parts are shared across the whole fleet and across scenario rebuilds,
+// so they are flagged: disposeGroup skips anything marked shared, otherwise the
+// second scenario switch would dispose the hull out from under every drone and
+// the scene would silently go blank.
+function shared(geo) { geo.userData.shared = true; return geo; }
+const hullGeo = shared(new THREE.BoxGeometry(0.34, 0.10, 0.46));
+const canopyGeo = shared(new THREE.BoxGeometry(0.18, 0.05, 0.26));
+const armGeo = shared(new THREE.BoxGeometry(0.86, 0.035, 0.06));
+const rotorGeo = shared(new THREE.CylinderGeometry(0.16, 0.16, 0.012, 12));
+const skidGeo = shared(new THREE.BoxGeometry(0.03, 0.03, 0.36));
+const ledGeo = shared(new THREE.SphereGeometry(0.035, 8, 6));
+const ringGeo = shared(new THREE.RingGeometry(0.10, 0.20, 24).rotateX(-Math.PI / 2));
+// The ghost is the same silhouette as the live craft, drawn only as lines: the
+// comparison stays drone-versus-same-drone-untrained, and a line drawing can
+// never be mistaken for a working unit.
+const ghostGeo = shared(new THREE.EdgesGeometry(mergeGeometries([
+  hullGeo.clone(),
+  armGeo.clone().rotateY(Math.PI / 4),
+  armGeo.clone().rotateY(-Math.PI / 4),
+])));
+
+// A quadcopter the animation can actually fly: rotors that spin, a craft that
+// banks, a status LED and glow ring. Status lives on the accent materials
+// (canopy stripe, LED, ring) rather than the whole body, and it is carried in
+// emissive because emissive survives tone mapping and dusk fog where albedo
+// turns to mud.
+function buildDrone(tint) {
+  const g = new THREE.Group();
+  g.rotation.order = 'YXZ';                            // yaw, then pitch and roll
+  const bodyMat = new THREE.MeshStandardMaterial({ color: 0x3a3f44, roughness: 0.45, metalness: 0.55 });
+  const accentMat = new THREE.MeshStandardMaterial({
+    color: tint, roughness: 0.35, metalness: 0.3, emissive: tint, emissiveIntensity: 0.28 });
+  const rotorMat = new THREE.MeshBasicMaterial({
+    color: 0x9aa39f, transparent: true, opacity: 0.3, side: THREE.DoubleSide, depthWrite: false });
+  const ledMat = new THREE.MeshBasicMaterial({ color: tint });
+  const ringMat = new THREE.MeshBasicMaterial({
+    color: tint, transparent: true, opacity: 0.3, side: THREE.DoubleSide, depthWrite: false });
+
+  const solid = [];
+  const hull = new THREE.Mesh(hullGeo, bodyMat); solid.push(hull);
+  const canopy = new THREE.Mesh(canopyGeo, accentMat);
+  canopy.position.y = 0.075; solid.push(canopy);
+  const armA = new THREE.Mesh(armGeo, bodyMat); armA.rotation.y = Math.PI / 4; solid.push(armA);
+  const armB = new THREE.Mesh(armGeo, bodyMat); armB.rotation.y = -Math.PI / 4; solid.push(armB);
+  for (const sx of [-0.10, 0.10]) {
+    const skid = new THREE.Mesh(skidGeo, bodyMat);
+    skid.position.set(sx, -0.085, 0); solid.push(skid);
+  }
+  const rotors = [];
+  [[-0.30, -0.30], [0.30, -0.30], [-0.30, 0.30], [0.30, 0.30]].forEach(([rx, rz], i) => {
+    const r = new THREE.Mesh(rotorGeo, rotorMat);
+    r.position.set(rx, 0.09, rz);
+    r.userData.dir = i % 2 ? 1 : -1;                   // counter-rotating pairs
+    r.renderOrder = 3;
+    g.add(r); rotors.push(r);
+  });
+  const led = new THREE.Mesh(ledGeo, ledMat);
+  led.position.set(0, 0.05, -0.26);                    // tail light; the nose faces +z
+  g.add(led);
+  const ring = new THREE.Mesh(ringGeo, ringMat);
+  ring.position.y = -0.10; ring.renderOrder = 3;
+  g.add(ring);
+  for (const m of solid) { m.castShadow = true; m.renderOrder = 2; g.add(m); }
+
+  g.userData.statusMats = [accentMat, ledMat, ringMat];
+  g.userData.rotors = rotors;
+  g.userData.roll = 0; g.userData.pitch = 0;
+  g.userData.drop = 0; g.userData.spin = 1;
+  g.userData.bob = Math.random() * Math.PI * 2;        // desynchronised hover
+  return g;
+}
+
+// Sky lives on the scene, not the board, so scenario switches never dispose it.
+const dome = new THREE.Mesh(
+  new THREE.SphereGeometry(150, 24, 12),
+  new THREE.MeshBasicMaterial({ map: TEX.sky, side: THREE.BackSide, fog: false, depthWrite: false }));
+scene.add(dome);
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.06;
 controls.maxPolarAngle = Math.PI * 0.49;
 
-scene.add(new THREE.AmbientLight(0xdfe6e2, 0.5));
-const key = new THREE.DirectionalLight(0xffffff, 1.5);
-key.position.set(10, 16, 6);
-scene.add(key);
-const rim = new THREE.DirectionalLight(GOAL_GREEN, 0.55);
-rim.position.set(-10, 5, -10);
+// Dusk: cool sky bounce, one warm low sun that casts every shadow, and a faint
+// cool rim so unlit faces do not vanish into the fog.
+scene.add(new THREE.HemisphereLight(0x3d4a58, 0x2b2018, 0.85));
+const sun = new THREE.DirectionalLight(0xffb37a, 2.6);
+sun.position.set(14, 18, 8);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.bias = -0.0006;
+sun.shadow.normalBias = 0.02;
+scene.add(sun);
+const rim = new THREE.DirectionalLight(0x6f86aa, 0.5);
+rim.position.set(-10, 6, -10);
 scene.add(rim);
 
 // Everything scenario-specific hangs off this group, so switching scenarios is a
@@ -288,7 +484,11 @@ const HOLD_SECONDS = 2.4;     // how long to sit on the last frame before loopin
 
 function disposeGroup(g) {
   g.traverse(o => {
-    if (o.geometry) o.geometry.dispose();
+    // Shared geometry (drone parts, the ghost outline) survives the rebuild;
+    // disposing it here would blank every drone on the second scenario switch.
+    // Materials are always per-instance by construction, so they always go, and
+    // material.dispose() never touches textures, so the shared canvases are safe.
+    if (o.geometry && !o.geometry.userData.shared) o.geometry.dispose();
     if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.dispose());
   });
   scene.remove(g);
@@ -296,11 +496,9 @@ function disposeGroup(g) {
 
 function buildScene(sc) {
   disposeGroup(board);
-  [...drones, ...trails, ...stems, ...ghosts].forEach(o => {
-    if (o.geometry) o.geometry.dispose();
-    if (o.material) o.material.dispose();
-    scene.remove(o);
-  });
+  // Drones are Groups now, so the old flat geometry/material teardown would
+  // miss every child; the traverse in disposeGroup handles both shapes.
+  [...drones, ...trails, ...stems, ...ghosts].forEach(o => disposeGroup(o));
   drones = []; trails = []; stems = []; ghosts = []; blockers = [];
 
   const N = sc.gridSize;
@@ -312,78 +510,145 @@ function buildScene(sc) {
   // picture contradicts the rule the environment is enforcing.
   FLY = 0.42;
   LIFT = 1.05;
-  scene.fog = new THREE.Fog(0x070b08, N * 1.8, N * 4.4);
+  // Fog is pushed further out than the old abstract look needed, or the facade
+  // textures haze over at the default camera distance; its color matches the
+  // sky dome's horizon band so ground haze blends into sky.
+  scene.fog = new THREE.Fog(FOG_DUSK, N * 2.2, N * 5.0);
   camera.position.set(N * 0.80, N * 0.92, N * 1.12);
   controls.target.set(0, -0.7, 0);
   controls.minDistance = N * 0.45;
   controls.maxDistance = N * 3;
   controls.update();
 
+  // The sun's shadow camera hugs the board; a fixed ortho box sized for the
+  // 8x8 wastes most of its 2048 texels on empty air over the 5x5.
+  const ext = N * 0.8 + 1;
+  const sunCam = sun.shadow.camera;
+  sunCam.left = -ext; sunCam.right = ext; sunCam.top = ext; sunCam.bottom = -ext;
+  sunCam.near = 2; sunCam.far = 60;
+  sunCam.updateProjectionMatrix();
+
   board = new THREE.Group();
   scene.add(board);
 
-  board.add(new THREE.Mesh(
+  // Asphalt on top, plain sides. One texture tile per street cell, and the
+  // dashed lane paint on the tile border replaces the old GridHelper outright:
+  // the road markings ARE the grid. The slab is 0.4 wider than the board, so
+  // the tiling is offset to keep lane lines on the true cell boundaries.
+  TEX.asphalt.repeat.set(N + 0.4, N + 0.4);
+  TEX.asphalt.offset.set(0.2, 0.2);
+  const groundSide = new THREE.MeshStandardMaterial({ color: 0x1a1d1f, roughness: 0.9 });
+  const groundTop = new THREE.MeshStandardMaterial({ map: TEX.asphalt, roughness: 0.95, metalness: 0.05 });
+  const ground = new THREE.Mesh(
     new THREE.BoxGeometry(N + 0.4, 0.12, N + 0.4),
-    new THREE.MeshStandardMaterial({ color: 0x0d1310, roughness: 0.92, metalness: 0.1 })
-  ).translateY(-0.18));
+    [groundSide, groundSide, groundTop, groundSide, groundSide, groundSide]);
+  ground.position.y = -0.18;
+  ground.receiveShadow = true;
+  board.add(ground);
 
-  const grid = new THREE.GridHelper(N, N, 0x2b3630, 0x1b241e);
-  grid.position.y = -0.11;
-  board.add(grid);
-
-  // Obstacles carry a height. A low one can be flown over and a solid one cannot,
-  // so they are drawn at different heights and in different materials: reading
-  // them alike would hide the only decision this scene is about.
+  // Obstacles carry a height. A low one can be flown over and a solid one
+  // cannot, so they are drawn as different buildings: parking decks the fleet
+  // skims, towers it has to route around. Reading them alike would hide the
+  // only decision this scene is about.
   const ceiling = sc.maxAltitude || 0;
-  // Blocks stay solid until something is actually hidden behind one, then only
-  // that block fades. Making everything permanently translucent was the obvious
-  // fix and the wrong one: a wall that always looks see-through stops reading as
-  // a barrier, which is the single thing this course is about, and the whole
-  // board turns to haze even when nothing is occluded. Fading on demand keeps
-  // the terrain legible and puts the transparency exactly where information is
-  // being lost. See updateOcclusion.
+  // Buildings stay solid until something is actually hidden behind one, then
+  // only that building fades. Making everything permanently translucent was the
+  // obvious fix and the wrong one: a wall that always looks see-through stops
+  // reading as a barrier, which is the single thing this course is about, and
+  // the whole board turns to haze even when nothing is occluded. Fading on
+  // demand keeps the city legible and puts the transparency exactly where
+  // information is being lost. See updateOcclusion.
   //
-  // Materials are cloned per block because each one fades independently.
-  const tallMat = new THREE.MeshStandardMaterial({
-    color: 0x2a352f, roughness: 0.55, metalness: 0.5, transparent: true, opacity: 1 });
-  const lowMat = new THREE.MeshStandardMaterial({
-    color: 0x354a3f, roughness: 0.5, metalness: 0.45, transparent: true, opacity: 1 });
-  const tallEdge = new THREE.LineBasicMaterial({ color: 0x8b9a92, transparent: true, opacity: 1 });
-  const lowEdge = new THREE.LineBasicMaterial({ color: 0x7fbe97, transparent: true, opacity: 1 });
+  // Wall materials are per-building (one cloned instance covering the five
+  // non-roof faces) because each building fades independently; the facade
+  // canvases behind them are shared.
   for (const cell of sc.obstacles) {
     const [x, y] = cell;
     const h = cell.length > 2 ? cell[2] : 2;         // older exports had no height
     const crossable = ceiling > 0 && h <= ceiling;
-    const tall = crossable ? 0.5 : 1.5;
+    // A stable per-cell hash picks the facade and jitters tower height, so the
+    // skyline varies without reshuffling on every rebuild. Towers run 1.6 to
+    // 2.5: the old uniform 1.5 barely cleared the flight ceiling at y 1.47, so
+    // impassable never LOOKED taller than reachable.
+    const hz = ((x * 73856093) ^ (y * 19349663)) >>> 0;
+    const tall = crossable ? 0.5 : 1.6 + (hz % 1000) / 1000 * 0.9;
     const geo = new THREE.BoxGeometry(0.88, tall, 0.88);
-    const m = new THREE.Mesh(geo, (crossable ? lowMat : tallMat).clone());
+    let wall, roof;
+    if (crossable) {
+      wall = new THREE.MeshStandardMaterial({
+        map: TEX.deckWall, emissive: 0x2f4a3c, emissiveIntensity: 0.25,
+        roughness: 0.8, metalness: 0.15, transparent: true, opacity: 1 });
+      roof = new THREE.MeshStandardMaterial({
+        map: TEX.deckTop, roughness: 0.9, metalness: 0.05, transparent: true, opacity: 1 });
+    } else {
+      const wt = TEX.wall[hz % 3];
+      // The same canvas is the albedo AND the emissive map, so only the lit
+      // window pixels glow; warm against the cool dusk.
+      wall = new THREE.MeshStandardMaterial({
+        map: wt, emissiveMap: wt, emissive: WINDOW_GLOW, emissiveIntensity: 0.6,
+        roughness: 0.7, metalness: 0.2, transparent: true, opacity: 1 });
+      roof = new THREE.MeshStandardMaterial({
+        map: TEX.roof, roughness: 0.9, metalness: 0.1, transparent: true, opacity: 1 });
+    }
+    const m = new THREE.Mesh(geo, [wall, wall, roof, wall, wall, wall]);
     m.position.copy(world(x, y)).setY(tall / 2 - 0.11);
+    m.castShadow = true;
+    m.receiveShadow = true;
     board.add(m);
     const e = new THREE.LineSegments(new THREE.EdgesGeometry(geo),
-      (crossable ? lowEdge : tallEdge).clone());
+      new THREE.LineBasicMaterial({
+        color: crossable ? 0x2f4a3c : 0x111416, transparent: true, opacity: 1 }));
     e.position.copy(m.position);
     board.add(e);
+    m.userData.mats = [wall, roof];
     m.userData.edge = e;
     m.userData.fade = 1;
     blockers.push(m);
   }
 
-  // Tunnels: floor a drone may cross only while landed. Drawn as an opening in
-  // the wall with a lintel over it, because a bare floor tile beside a solid
-  // block reads as a doorway a drone could fly through, which is the one thing
-  // it cannot do.
-  const tunnelMat = new THREE.MeshStandardMaterial({
-    color: 0x3a4a42, roughness: 0.6, metalness: 0.4, transparent: true, opacity: 0.45 });
+  // Tunnels: floor a drone may cross only while landed. Drawn as a street
+  // underpass, because a bare floor tile beside a tower reads as a doorway a
+  // drone could fly through, which is the one thing it cannot do. Two piers
+  // carry a road deck whose top sits flush with the tower-base line and whose
+  // underside is at 1.06: a landed drone passes clean underneath, while the
+  // airborne altitude of 1.47 lands inside the slab, so ground-only is
+  // structural rather than a rule you have to be told.
   for (const [tx, ty] of (sc.tunnels || [])) {
     const p = world(tx, ty);
-    const lintel = new THREE.Mesh(new THREE.BoxGeometry(0.88, 0.62, 0.88), tunnelMat);
-    lintel.position.copy(p).setY(1.19);          // sits above the head of a landed drone
-    board.add(lintel);
-    const e = new THREE.LineSegments(
-      new THREE.EdgesGeometry(new THREE.BoxGeometry(0.88, 0.62, 0.88)),
-      new THREE.LineBasicMaterial({ color: 0x8fa79b }));
-    e.position.copy(lintel.position);
-    board.add(e);
+    // Which way does the wall run? The tunnel's wall neighbours tell us, and
+    // the passage runs perpendicular to them.
+    const alongZ = sc.obstacles.some(c => c[0] === tx && Math.abs(c[1] - ty) === 1);
+    const pier1 = alongZ
+      ? new THREE.BoxGeometry(0.88, 1.06, 0.16) : new THREE.BoxGeometry(0.16, 1.06, 0.88);
+    const pier2 = pier1.clone();
+    if (alongZ) { pier1.translate(0, 0.42, -0.36); pier2.translate(0, 0.42, 0.36); }
+    else { pier1.translate(-0.36, 0.42, 0); pier2.translate(0.36, 0.42, 0); }
+    const slab = new THREE.BoxGeometry(0.88, 0.44, 0.88);
+    slab.translate(0, 1.28, 0);                        // spans y 1.06 to 1.50
+    // One merged mesh per underpass: one raycast test, one fade handle.
+    const under = new THREE.Mesh(
+      mergeGeometries([pier1, pier2, slab]),
+      new THREE.MeshStandardMaterial({
+        map: TEX.deckWall, roughness: 0.8, metalness: 0.1, transparent: true, opacity: 1 }));
+    under.position.copy(p);
+    under.castShadow = true;
+    under.receiveShadow = true;
+    board.add(under);
+    // Hazard stripe over each open mouth, on the slab edge.
+    const stripeMat = new THREE.MeshBasicMaterial({
+      map: TEX.hazard, transparent: true, opacity: 1,
+      polygonOffset: true, polygonOffsetFactor: -1 });
+    for (const side of [-1, 1]) {
+      const stripe = new THREE.Mesh(new THREE.PlaneGeometry(0.88, 0.12), stripeMat);
+      if (alongZ) { stripe.position.copy(p).add(new THREE.Vector3(side * 0.441, 1.12, 0)); stripe.rotation.y = side * Math.PI / 2; }
+      else { stripe.position.copy(p).add(new THREE.Vector3(0, 1.12, side * 0.441)); stripe.rotation.y = side > 0 ? 0 : Math.PI; }
+      board.add(stripe);
+    }
+    // The old lintel never joined the fade system; the underpass does, so it
+    // goes translucent like everything else when it hides a drone.
+    under.userData.mats = [under.material, stripeMat];
+    under.userData.fade = 1;
+    blockers.push(under);
   }
 
   // Goals painted flat. Raised columns read as obstacles, which is the one
@@ -395,15 +660,16 @@ function buildScene(sc) {
   // parked one square off, on a neighbour's pad. Ownership has to be visible or
   // correct behaviour looks like a bug, and the fleet's own palette is already
   // the vocabulary for whose-is-whose.
-  const padGreen = new THREE.MeshBasicMaterial({ color: GOAL_GREEN, transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false });
+  // Helipad discs, painted in GOAL_GREEN so the board still reads "these are
+  // the goals" at a glance; the owner's colour stays on the ring, which is the
+  // part you look at when asking whose pad this is.
+  const padGreen = new THREE.MeshBasicMaterial({ map: TEX.helipad, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false });
   sc.goals.forEach(([x, y], i) => {
     const tint = PALETTE[i % PALETTE.length];
     const p = world(x, y);
-    // The fill stays green so the board still reads as "these are the goals" at
-    // a glance; the owner's colour goes on the ring, which is the part you look
-    // at when asking whose pad this is.
     const pad = new THREE.Mesh(padGeo, padGreen);
     pad.position.copy(p).setY(-0.045);
+    pad.renderOrder = 1;
     board.add(pad);
     const ring = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints([
       new THREE.Vector3(-0.39, 0, -0.39), new THREE.Vector3(0.39, 0, -0.39),
@@ -413,30 +679,37 @@ function buildScene(sc) {
     board.add(ring);
   });
 
-  const dGeo = new THREE.OctahedronGeometry(0.38);
+  // Trail buffers are sized once to the longest run in the scenario and written
+  // in place each frame. The previous code disposed and rebuilt every trail
+  // geometry on every painted frame, which was the render loop's one real
+  // allocation churn.
+  const maxLen = Math.max(...sc.runs.map(r => r.frames.length)) + 2;
+
   for (let i = 0; i < sc.numDrones; i++) {
     const tint = PALETTE[i % PALETTE.length];
-    const mesh = new THREE.Mesh(dGeo, new THREE.MeshStandardMaterial({
-      color: tint, roughness: 0.3, metalness: 0.45, flatShading: true,
-      emissive: tint, emissiveIntensity: 0.28,
-    }));
-    mesh.renderOrder = 2;   // drawn after the translucent terrain
+    const mesh = buildDrone(tint);
     mesh.position.y = FLY;
     scene.add(mesh); drones.push(mesh);
 
-    // Ghost: the same drone under the untrained policy, on the same board at the
-    // same step. Wireframe and warm-toned so it never competes with the real one.
-    const g = new THREE.Mesh(dGeo, new THREE.MeshBasicMaterial({
-      color: GHOST, wireframe: true, transparent: true, opacity: 0.6,
+    // Ghost: the same drone under the untrained policy, on the same board at
+    // the same step. Line-drawn and warm-toned so it never competes with, or
+    // gets mistaken for, the real one.
+    const g = new THREE.LineSegments(ghostGeo, new THREE.LineBasicMaterial({
+      color: GHOST, transparent: true, opacity: 0.6,
     }));
     g.position.y = FLY;
     scene.add(g); ghosts.push(g);
 
-    const stem = new THREE.Line(new THREE.BufferGeometry(),
+    const stemGeo = new THREE.BufferGeometry();
+    stemGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(2 * 3), 3));
+    const stem = new THREE.Line(stemGeo,
       new THREE.LineBasicMaterial({ color: tint, transparent: true, opacity: 0.3 }));
     scene.add(stem); stems.push(stem);
 
-    const trail = new THREE.Line(new THREE.BufferGeometry(),
+    const trailGeo = new THREE.BufferGeometry();
+    trailGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(maxLen * 3), 3));
+    trailGeo.setDrawRange(0, 0);
+    const trail = new THREE.Line(trailGeo,
       new THREE.LineBasicMaterial({ color: tint, transparent: true, opacity: 0.75 }));
     scene.add(trail); trails.push(trail);
   }
@@ -468,10 +741,12 @@ function updateOcclusion(dt) {
   const k = Math.min(1, dt * 9);
   for (const b of blockers) {
     b.userData.fade += (b.userData.want - b.userData.fade) * k;
-    b.material.opacity = b.userData.fade;
-    // The outline holds on longer than the fill, so a faded block still reads as
-    // a block rather than disappearing.
-    b.userData.edge.material.opacity = 0.4 + 0.6 * b.userData.fade;
+    // A building carries several materials (walls, roof, hazard stripes); they
+    // fade as one.
+    for (const m of b.userData.mats) m.opacity = b.userData.fade;
+    // The outline holds on longer than the fill, so a faded building still
+    // reads as a building rather than disappearing. Underpasses carry no edge.
+    if (b.userData.edge) b.userData.edge.material.opacity = 0.4 + 0.6 * b.userData.fade;
   }
 }
 
@@ -511,30 +786,49 @@ function paint() {
     // Interpolate altitude too, so a climb reads as a rise rather than a jump.
     const aAlt = a.altitudes ? a.altitudes[d] : 0;
     const bAlt = b.altitudes ? b.altitudes[d] : 0;
-    drones[d].position.lerpVectors(
-      world(a.positions[d][0], a.positions[d][1]),
-      world(b.positions[d][0], b.positions[d][1]), t)
+    const pa = world(a.positions[d][0], a.positions[d][1]);
+    const pb = world(b.positions[d][0], b.positions[d][1]);
+    drones[d].position.lerpVectors(pa, pb, t)
       .setY(FLY + LIFT * (aAlt + (bAlt - aAlt) * t));
-    drones[d].rotation.y += 0.012;
 
     const home = a.atGoal[d];
     const drifted = home && bounced && bounced[d];
+    // The one status decision, unchanged from the octahedron days; it now
+    // recolors the accent materials (canopy stripe, LED, glow ring) instead of
+    // one whole-body material.
     const tint = home ? (drifted ? BOUNCED_AMBER : GOAL_GREEN) : PALETTE[d % PALETTE.length];
-    drones[d].material.color.setHex(tint);
-    drones[d].material.emissive.setHex(tint);
-    drones[d].material.emissiveIntensity = home ? 0.75 : 0.28;
+    for (const m of drones[d].userData.statusMats) {
+      m.color.setHex(tint);
+      if (m.emissive) { m.emissive.setHex(tint); m.emissiveIntensity = home ? 0.85 : 0.28; }
+    }
 
-    stems[d].geometry.dispose();
-    stems[d].geometry = new THREE.BufferGeometry().setFromPoints(
-      [drones[d].position.clone(), drones[d].position.clone().setY(-0.04)]);
+    // Pose TARGETS come from the raw frame data, never from the eased mesh, so
+    // the easing in updateFleetMotion cannot feed back into itself. A drone
+    // standing on its goal at ground level is parked: it settles onto the pad
+    // and its rotors spin down, and if it later leaves (a bounce), the same
+    // targets lift it back off, in amber.
+    const u = drones[d].userData;
+    const dx = pb.x - pa.x, dz = pb.z - pa.z;
+    const moving = dx * dx + dz * dz > 1e-6;
+    if (moving) u.headingTarget = Math.atan2(dx, dz);
+    u.pitchTarget = moving ? 0.28 : 0;
+    const grounded = home && aAlt === 0 && bAlt === 0;
+    u.dropTarget = grounded ? 1 : 0;
+    u.spinTarget = grounded ? 0.12 : 1;
 
     // Routes are traced on the floor. Drawn at flight height they hang in the
-    // air and read as stray geometry rather than as a path anyone took.
-    const pts = run.frames.slice(0, i + 1)
-      .map(f => world(f.positions[d][0], f.positions[d][1]).setY(0.02));  // route on the ground
-    pts.unshift(world(S.starts[d][0], S.starts[d][1]).setY(0.02));
-    trails[d].geometry.dispose();
-    trails[d].geometry = new THREE.BufferGeometry().setFromPoints(pts);
+    // air and read as stray geometry rather than as a path anyone took. The
+    // points are written into the preallocated buffer, not rebuilt.
+    const tp = trails[d].geometry.attributes.position;
+    const start = world(S.starts[d][0], S.starts[d][1]);
+    tp.setXYZ(0, start.x, 0.02, start.z);
+    for (let k2 = 0; k2 <= i; k2++) {
+      const f = run.frames[k2];
+      const w2 = world(f.positions[d][0], f.positions[d][1]);
+      tp.setXYZ(k2 + 1, w2.x, 0.02, w2.z);
+    }
+    tp.needsUpdate = true;
+    trails[d].geometry.setDrawRange(0, i + 2);
 
     ghosts[d].visible = showGhost;
     if (showGhost) {
@@ -555,6 +849,44 @@ function paint() {
   el('s-refused').textContent = run.frames.slice(0, i + 1).reduce((s, f) => s + f.refused, 0);
   el('step').textContent = `${i + 1} / ${run.frames.length}`;
   el('scrub').value = i;
+}
+
+// How the fleet flies, as opposed to where. paint() sets data-driven targets;
+// this eases toward them every rendered frame, so rotors keep turning and a
+// parked craft keeps sitting even while playback is paused on one step.
+function updateFleetMotion(dt, now) {
+  for (let d = 0; d < drones.length; d++) {
+    const q = drones[d], u = q.userData;
+    const k = Math.min(1, dt * 6);
+
+    // Shortest-arc yaw, or a turn from 350 to 10 degrees whips the long way
+    // round the compass.
+    let dy = (u.headingTarget ?? q.rotation.y) - q.rotation.y;
+    dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+    q.rotation.y += dy * k;
+    u.roll = THREE.MathUtils.clamp(THREE.MathUtils.lerp(u.roll, -dy * 1.4, k), -0.3, 0.3);
+    u.pitch = THREE.MathUtils.lerp(u.pitch, u.pitchTarget || 0, k);
+    q.rotation.x = -Math.min(0.3, u.pitch);            // nose down into travel
+    q.rotation.z = u.roll;                             // bank into the turn
+
+    // drop eases the craft between hover height and its pad; spin winds the
+    // rotors down on landing and back up on departure. Both run slower than
+    // the pose easing so touchdown reads as a maneuver, not a snap.
+    u.drop = THREE.MathUtils.lerp(u.drop, u.dropTarget || 0, Math.min(1, dt * 3));
+    u.spin = THREE.MathUtils.lerp(u.spin, u.spinTarget ?? 1, Math.min(1, dt * 2.5));
+    const hoverY = q.position.y;                       // paint() set the data height
+    q.position.y = THREE.MathUtils.lerp(hoverY, 0.04, u.drop)
+      + Math.sin(now * 0.004 + u.bob) * 0.02 * (1 - u.drop);   // bob only while airborne
+    for (const r of u.rotors) r.rotation.y += dt * 22 * u.spin * r.userData.dir;
+
+    // Stems tie the craft to its shadow spot on the street. Written here, after
+    // the final height is known, or a landed drone's stem would hang in the air
+    // at hover height.
+    const sp = stems[d].geometry.attributes.position;
+    sp.setXYZ(0, q.position.x, q.position.y, q.position.z);
+    sp.setXYZ(1, q.position.x, -0.04, q.position.z);
+    sp.needsUpdate = true;
+  }
 }
 
 /* curve */
@@ -721,6 +1053,7 @@ renderer.setAnimationLoop(now => {
     }
   }
   paint();
+  updateFleetMotion(dt, now);   // after paint: eases toward the targets it just set
   controls.update();
   updateOcclusion(dt);      // after controls, so the camera is where it will render from
   renderer.render(scene, camera);
