@@ -462,7 +462,7 @@ controls.maxPolarAngle = Math.PI * 0.49;
 // discovers it CAN orbit; the hint chip says so in words. Both retire on the
 // first pointer or wheel, and the chip times out on its own regardless.
 controls.autoRotate = true;
-controls.autoRotateSpeed = 0.8;
+controls.autoRotateSpeed = 0.4;   // one lap every couple of minutes; a drift, not a spin
 function endAutoOrbit() {
   controls.autoRotate = false;
   const h = document.getElementById('orbitHint');
