@@ -189,13 +189,14 @@
 <div id="hud">
   <div class="stat"><div class="k">Step</div><div class="v" id="s-step">0</div></div>
   <div class="stat"><div class="k">Reward</div><div class="v" id="s-reward">0</div></div>
-  <div class="stat"><div class="k">At goal</div><div class="v accent" id="s-goal">0</div></div>
+  <div class="stat"><div class="k">Settled</div><div class="v accent" id="s-goal">0</div></div>
   <div class="stat"><div class="k">Refused</div><div class="v" id="s-refused">0</div></div>
 </div>
 
 <div id="legend" class="panel">
   <div><span class="swatch" style="background:#e8ebe9"></span>trained policy</div>
   <div><span class="swatch" style="background:#6faa85"></span>arrived at its goal</div>
+  <div><span class="swatch" style="background:#c8a06a"></span>left a goal and came back, not counted</div>
   <div><span class="swatch" style="background:#6b5f52"></span>untrained ghost</div>
   <div><span class="swatch" style="background:#2f4038;border:1px solid #6faa85"></span>low, can be flown over</div>
   <div><span class="swatch" style="background:#232d27"></span>solid, must be gone around</div>
@@ -233,6 +234,10 @@ const PALETTE = [
   0xb9c0bb, 0x8d9aa3, 0x9aa39d, 0x77848c,
 ];
 const GOAL_GREEN = 0x6faa85;
+// A drone standing on its goal that had left one earlier. It is not counted as
+// settled, so it must not be drawn like the drones that are: seven greens beside
+// a label reading six is the interface contradicting itself.
+const BOUNCED_AMBER = 0xc8a06a;
 const GHOST = 0x6b5f52;   // warm, so it never reads as a drone doing well
 
 // Flight height scales with the board. A fixed height that looked right on the
@@ -471,6 +476,24 @@ function updateOcclusion(dt) {
 }
 
 /* playback */
+
+// Which drones have left a goal they had already reached, as of each frame.
+// Derived here rather than exported: every position and altitude is already on
+// hand, and computing it locally keeps the picture and the checkpoint count
+// answering the same question at every step of the replay.
+function bounceFlags(r) {
+  const n = r.frames[0].atGoal.length;
+  const landed = new Array(n).fill(false);
+  const bounced = new Array(n).fill(false);
+  return r.frames.map(f => {
+    for (let d = 0; d < n; d++) {
+      if (landed[d] && !f.atGoal[d]) bounced[d] = true;
+      if (f.atGoal[d]) landed[d] = true;
+    }
+    return bounced.slice();
+  });
+}
+
 function frameAt(r, i) {
   const last = r.frames.length - 1;
   return r.frames[Math.max(0, Math.min(i, last))];
@@ -480,6 +503,8 @@ function paint() {
   const i = Math.max(0, Math.floor(cursor));
   const t = cursor - i;
   const a = frameAt(run, i), b = frameAt(run, i + 1);
+  const flags = run._bounce || (run._bounce = bounceFlags(run));
+  const bounced = flags[Math.max(0, Math.min(i, flags.length - 1))];
   const showGhost = el('ghost').checked && ghostRun && ghostRun !== run;
 
   for (let d = 0; d < drones.length; d++) {
@@ -493,8 +518,10 @@ function paint() {
     drones[d].rotation.y += 0.012;
 
     const home = a.atGoal[d];
-    drones[d].material.color.setHex(home ? GOAL_GREEN : PALETTE[d % PALETTE.length]);
-    drones[d].material.emissive.setHex(home ? GOAL_GREEN : PALETTE[d % PALETTE.length]);
+    const drifted = home && bounced && bounced[d];
+    const tint = home ? (drifted ? BOUNCED_AMBER : GOAL_GREEN) : PALETTE[d % PALETTE.length];
+    drones[d].material.color.setHex(tint);
+    drones[d].material.emissive.setHex(tint);
     drones[d].material.emissiveIntensity = home ? 0.75 : 0.28;
 
     stems[d].geometry.dispose();
@@ -521,7 +548,10 @@ function paint() {
 
   el('s-step').textContent = i + 1;
   el('s-reward').textContent = a.cumulative.toFixed(1);
-  el('s-goal').textContent = `${a.atGoal.filter(Boolean).length}/${S.numDrones}`;
+  // Settled, not merely standing there, so this agrees with the checkpoint
+  // label and with the colours on the board.
+  const settledNow = a.atGoal.filter((v, d) => v && !bounced[d]).length;
+  el('s-goal').textContent = `${settledNow}/${S.numDrones}`;
   el('s-refused').textContent = run.frames.slice(0, i + 1).reduce((s, f) => s + f.refused, 0);
   el('step').textContent = `${i + 1} / ${run.frames.length}`;
   el('scrub').value = i;
