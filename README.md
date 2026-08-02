@@ -15,8 +15,8 @@
 <img alt="python 3.10" src="https://img.shields.io/badge/python-3.10-dfe3e0?style=flat-square&labelColor=0d1410">
 <img alt="PPO in PyTorch 2.2.2" src="https://img.shields.io/badge/PPO-PyTorch_2.2.2-8f9491?style=flat-square&labelColor=0d1410">
 <img alt="env gymnasium" src="https://img.shields.io/badge/env-gymnasium-8f9491?style=flat-square&labelColor=0d1410">
-<img alt="tests 52 passing" src="https://img.shields.io/badge/tests-52_passing-8f9491?style=flat-square&labelColor=0d1410">
-<img alt="coverage 90 percent" src="https://img.shields.io/badge/coverage-90%25-8f9491?style=flat-square&labelColor=0d1410">
+<img alt="tests 64 passing" src="https://img.shields.io/badge/tests-64_passing-8f9491?style=flat-square&labelColor=0d1410">
+<img alt="coverage 86 percent" src="https://img.shields.io/badge/coverage-86%25-8f9491?style=flat-square&labelColor=0d1410">
 <img alt="license Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-8f9491?style=flat-square&labelColor=0d1410">
 
 <br/><br/>
@@ -111,6 +111,7 @@ Every profile is solved, by every seed.
 | Four drones, 8x8 | 12000 | 5 of 5 | **14** | 14 |
 | One drone, obstacle course | 4000 | 5 of 5 | **19** | 19, with 2 climbs and 2 descents |
 | Four drones, obstacle course | 30000 | 5 of 5 | 20 | 19, with 2 climbs each |
+| Eight drones, obstacle course | 20000 | 10 of 10 | 21 | 17, best plan a central planner has found |
 
 The lower bound on the flat profiles is the longest single-agent shortest path, from breadth-first search on the same board. No schedule can finish before its slowest drone could fly straight there alone, so matching it means every other drone yielded at **zero cost** to it. The fleet is not merely arriving; it is coordinating without waste.
 
@@ -182,8 +183,9 @@ Nothing is simulated in the browser. `scripts/export_trajectory.py` plays greedy
 |---|---|---|---|
 | One drone, 5x5 | `-28.89` to `+61.06` | `0.0` to `1.0` of 1 | **`0`** |
 | Four drones, 8x8 | `-196.35` to `+245.25` | `0.0` to `4.0` of 4 | **`0`** |
-| One drone, over a wall | `-49.16` to `+57.62` | `0.0` to `1.0` of 1 | **`0`** |
-| Four drones, over a wall | `-235.12` to `+223.16` | `0.0` to `4.0` of 4 | `24` |
+| One drone, obstacle course | `-49.16` to `+57.62` | `0.0` to `1.0` of 1 | **`0`** |
+| Four drones, obstacle course | `-235.12` to `+223.16` | `0.0` to `4.0` of 4 | `24` |
+| Eight drones, obstacle course | `-826.64` to `+420.24` | `0.0` to `8.0` of 8 | `13` |
 
 That last column is why the curve is drawn as a band rather than a line. A zero-width band means all five seeds finished on the same number, which is convergence rather than an average of runs that disagreed with each other.
 
@@ -424,7 +426,6 @@ Worth reading before the deployment sections. The repository name is older than 
 | Obstacles | **Implemented**. Drawn from `obstacle_density`, refuse movement, and are locally sensed |
 | Safety Controller | **Implemented**. Geofence and separation, the only component permitted to veto |
 | Learning, fixed profiles | **Implemented**. Every seed solves all five: one drone on 5x5, four on 8x8, one and then four on the obstacle course, and eight on the obstacle course. The last needed `entropy_coef` raised off its default, for reasons recorded in [`configs/fly-fleet8.yaml`](configs/fly-fleet8.yaml) |
-| Learning, shipped profile | **Not solved**. Ten drones on 20x20 with random layouts defeats this implementation. Every profile above uses `fixed_layout`, so generalising across layouts is untested rather than merely unfinished |
 | Potential-based reward shaping | **Implemented**, off by default via `reward_shaping` |
 | Fixed layouts for reproducible tasks | **Implemented** via `fixed_layout` |
 | `render()` | **Implemented**. `metadata` had advertised a human render mode with nothing behind it |
