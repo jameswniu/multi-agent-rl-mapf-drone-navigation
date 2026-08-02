@@ -140,6 +140,12 @@
   }
   .swatch { display: inline-block; width: 10px; height: 10px; margin-right: 8px; vertical-align: baseline; }
 
+  #orbitHint {
+    position: fixed; left: 50%; bottom: 108px; transform: translateX(-50%);
+    padding: 8px 16px; background: rgba(12,15,14,0.78); border: 1px solid var(--border);
+    color: #d5dbd7; font-size: 12px; letter-spacing: 2.4px; z-index: 3;
+    pointer-events: none; transition: opacity 0.8s;
+  }
   #loading { position: fixed; inset: 0; display: grid; place-items: center; background: var(--bg); color: var(--muted); font-size: 13px; letter-spacing: 2px; z-index: 9; }
 
   @media (max-width: 1180px) {
@@ -152,6 +158,7 @@
 <body>
 
 <div id="stage"></div>
+<div id="orbitHint" class="mono">DRAG TO ORBIT &middot; SCROLL TO ZOOM</div>
 
 <header>
   <p class="eyebrow mono">RECORDED ROLLOUTS / NOTHING SIMULATED IN THE BROWSER</p>
@@ -245,7 +252,7 @@ const GHOST = 0x6b5f52;   // warm, so it never reads as a drone doing well
 // band so ground haze blends into sky instead of drawing a seam, and the window
 // glow is warm against the cool dusk so lit towers read at a glance.
 const SKY_TOP = 0x0a1016;
-const FOG_DUSK = 0x2a2723;
+const FOG_DUSK = 0x262320;
 const WINDOW_GLOW = 0xffd9a0;
 
 // Flight height scales with the board. A fixed height that looked right on the
@@ -353,18 +360,18 @@ const TEX = {
   hazard: makeTex(64, 32, (g, w, h) => {
     g.fillStyle = '#151312'; g.fillRect(0, 0, w, h);
     g.save(); g.translate(w / 2, h / 2); g.rotate(-Math.PI / 4);
-    g.fillStyle = '#d8b13c';
+    g.fillStyle = '#8f7d4f';
     for (let x = -w; x < w; x += 16) g.fillRect(x, -h, 8, h * 2);
     g.restore();
   }),
   sky: makeTex(512, 256, (g, w, h) => {
     const grad = g.createLinearGradient(0, 0, 0, h);
     grad.addColorStop(0.00, '#0a1016');               // zenith
-    grad.addColorStop(0.42, '#16222b');
-    grad.addColorStop(0.52, '#3f3a35');
-    grad.addColorStop(0.60, '#8a5a3c');               // horizon band the fog matches
-    grad.addColorStop(0.72, '#241f1c');
-    grad.addColorStop(1.00, '#15100d');
+    grad.addColorStop(0.42, '#141d24');
+    grad.addColorStop(0.52, '#2e2c29');
+    grad.addColorStop(0.60, '#5c4a3d');               // horizon band, kept quiet
+    grad.addColorStop(0.72, '#1f1b19');
+    grad.addColorStop(1.00, '#13100e');
     g.fillStyle = grad; g.fillRect(0, 0, w, h);
   }),
 };
@@ -451,11 +458,24 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.06;
 controls.maxPolarAngle = Math.PI * 0.49;
+// The scene orbits by itself until the first touch, which is how a viewer
+// discovers it CAN orbit; the hint chip says so in words. Both retire on the
+// first pointer or wheel, and the chip times out on its own regardless.
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.8;
+function endAutoOrbit() {
+  controls.autoRotate = false;
+  const h = document.getElementById('orbitHint');
+  if (h) h.style.opacity = '0';
+}
+renderer.domElement.addEventListener('pointerdown', endAutoOrbit, { once: true });
+renderer.domElement.addEventListener('wheel', endAutoOrbit, { once: true, passive: true });
+setTimeout(() => { const h = document.getElementById('orbitHint'); if (h) h.style.opacity = '0'; }, 12000);
 
 // Dusk: cool sky bounce, one warm low sun that casts every shadow, and a faint
 // cool rim so unlit faces do not vanish into the fog.
 scene.add(new THREE.HemisphereLight(0x3d4a58, 0x2b2018, 0.85));
-const sun = new THREE.DirectionalLight(0xffb37a, 2.6);
+const sun = new THREE.DirectionalLight(0xf2c39a, 2.2);
 sun.position.set(14, 18, 8);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
