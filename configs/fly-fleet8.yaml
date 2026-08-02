@@ -1,5 +1,6 @@
 # Eight drones on the same eight wide course, and the densest board here that
-# is solved: ten seeds of ten bring every drone home, in 24 steps against the
+# is solved: ten seeds of ten bring every drone home and keep it there, in 24
+# steps against the
 # best plan a central planner has found for this board, 17, with 33 refused
 # moves. Seventeen is a bound and not a proven optimum: prioritised planning is
 # incomplete and scripts/plan_optimum.py reports the best of 400 sampled
