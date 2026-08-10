@@ -1,0 +1,84 @@
+% arXiv-ready draft. Compile with pdflatex. cs.MA primary, cs.LG cross-list.
+\documentclass[11pt]{article}
+\usepackage[margin=1.1in]{geometry}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage[hidelinks]{hyperref}
+\usepackage{microtype}
+
+\title{Who the Reward Pays, and How Often:\\A Two-Axis Density Taxonomy for Multi-Agent Reward Design}
+\author{James W.\ Niu}
+\date{August 2026 \\ \small Working draft. Code and incident logs: \url{https://github.com/jameswniu/multi-agent-rl-mapf-drone-navigation}}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Reward design advice in multi-agent reinforcement learning usually treats two questions as one: how often the reward arrives (sparse versus dense) and who the reward is about (the agent's own task versus its interactions with peers). We propose factoring them apart. The result is a $2{\times}2$ taxonomy in which each axis, self-alignment and peer-interaction, is independently sparse or dense, and each of the four quadrants predicts a distinct failure mode. We ground the taxonomy in a documented incident from a four-drone PPO gridworld: a sparse-sparse reward paid per-step income for standing on a goal while the episode ended only when every drone arrived, so completing the task switched the income off. The learned policy stranded one drone deliberately, scoring $+500$ against $-40$ for finishing, exactly the goal-hacking failure the sparse-sparse quadrant predicts. Repairing the specification lowered the headline score from $0.80$ to $0.40$ mean drones home, the expected signature of removing an exploit rather than a regression. We state what the taxonomy predicts for the three uninhabited quadrants and propose the controlled four-quadrant sweep that would test those predictions.
+\end{abstract}
+
+\section{Introduction}
+Multi-agent reward functions are usually written by feel and repaired by incident. Credit assignment methods decide which agent a shared outcome belongs to; shaping methods densify a sparse signal without changing the optimal policy; specification-gaming catalogues warn what optimizers do to misspecified objectives. What practitioners lack is a small map that says, before training, which failure mode a given reward \emph{shape} invites.
+
+Two properties of a multi-agent reward are routinely conflated but independent: \textbf{who a term pays on}, the agent's own task progress (\emph{self-alignment}) or the quality of its interactions with peers (\emph{peer-interaction}); and \textbf{how often it pays}, at discrete events (\emph{sparse}, $R = X\cdot\mathbf{1}[\text{goal\_met}]$) or continuously (\emph{dense}, $R = f(\text{alignment\_score})$). Crossing them gives four quadrants, and our claim is that the quadrants are not interchangeable: each invites a different, recognizable pathology. Contributions: (1) the taxonomy with a falsifiable behavioral prediction per quadrant; (2) a documented incident in which the sparse-sparse quadrant produced precisely its predicted failure, with the repair and the repaired system's \emph{lower} headline score reported as the health signal it is; (3) an honest placement of the shipped system in the matrix and the controlled sweep that would test the remaining quadrants.
+
+\section{The taxonomy}
+Sort every reward term by two questions. \textbf{Axis 1, self-alignment}: sparse $R = X\cdot\mathbf{1}[\text{goal\_met}]$, or dense $R = f(\text{alignment\_score})$ such as a distance potential, safety-margin maintenance, or smoothness. \textbf{Axis 2, peer-interaction}: sparse $R = Y\cdot\mathbf{1}[\text{coop\_event}]$ paid at discrete moments such as a handoff, or dense $R = g(\text{coop\_quality})$ such as clearance maintained or corridor yielding.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{p{0.16\linewidth}p{0.36\linewidth}p{0.36\linewidth}}
+\toprule
+ & \textbf{Peer: sparse} & \textbf{Peer: dense} \\
+\midrule
+\textbf{Self: sparse} & Spikes on both axes; unstable, goal hacking likely. \emph{Signature: exploits trading task completion for event income.} & Cooperation looks smooth while solo competence degrades. \emph{Signature: holds formation, skips task steps.} \\
+\addlinespace
+\textbf{Self: dense} & Flies itself well, competes with peers at bottlenecks. \emph{Signature: clean solo metrics, choke-point conflict.} & Steady on both axes; no spike left to farm. \emph{Signature: the stable quadrant, at the highest specification cost.} \\
+\bottomrule
+\end{tabular}
+\caption{The four quadrants and their predicted failure signatures.}
+\end{table}
+
+The axes are independent because they answer different questions: density is \emph{when} the optimizer receives gradient; the recipient axis is \emph{which behavior} the gradient is about. The same factoring echoes in LLM post-training, where outcome reward models grade only the final answer and process reward models grade each step; that debate is this matrix's self-alignment axis transplanted to another field, evidence the axis is load-bearing.
+
+\section{Case study: the sparse-sparse quadrant behaving as predicted}
+\textbf{Environment.} Four drones on a shared gridworld with obstacles, PPO, per-drone reward terms summed to the scalar the Gym API requires but computed and learned per drone.
+
+\textbf{Original specification.} A drone standing on its goal earned a bonus every step; the episode terminated only when all four were home. Step penalty $1.0$, collision penalty $2.0$.
+
+\textbf{The exploit.} Per-step goal income plus all-home termination means finishing switches the income off. The learned policy brought three drones home and stranded the fourth: three home scored $\mathbf{+500}$; all four home scored $\mathbf{-40}$. The agent was not failing to learn. It was learning the specification correctly; the specification was wrong.
+
+\textbf{The repair.} Arrival pays once ($+10$, first arrival only), and a completion bonus ($+50$ to every drone when the last arrives) is sized so solving beats almost-solving. The bonus is fleet-wide deliberately: arriving is a team outcome, and a drone that yields a corridor contributed to it.
+
+\textbf{The repaired score went down, and should have.} On five seeds, greedy evaluation at 2000 episodes, mean drones home fell from $0.80$ to $0.40$ of 4. Removing an exploit does not add capability; it stops the number being inflated by one. We report the drop because reward repairs that lower headline metrics are systematically underreported, and the drop is the observable separating ``removed an exploit'' from ``regressed the policy.''
+
+\textbf{What the repair did not do.} It re-priced events within the sparse-sparse quadrant; the goal bonus is still an event, not a gradient. The taxonomy keeps the residual risk legible: a spike is still what a policy learns to farm.
+
+\section{Placement, and the cost of moving}
+The shipped system sits in the sparse-sparse quadrant with the exploit patched. Moving is asymmetric. \textbf{Self axis:} potential-based shaping $F = \gamma\,\phi(s') - \phi(s)$ in the form of Ng, Harada and Russell (1999) is already implemented, provably policy-invariant, and off by default; the move is a configuration flag plus revalidation. \textbf{Peer axis:} a $g(\text{coop\_quality})$ term does not yet exist and is genuine design work, including validating that the graded signal is not itself exploitable. That asymmetry may partly explain why deployed multi-agent systems cluster in the sparse-peer column: the self axis has a decades-old safe densification tool; the peer axis has no off-the-shelf equivalent.
+
+\section{The experiment this taxonomy asks for}
+Same environment, same PPO configuration, five seeds per cell, reward specification the only manipulated variable, one specification per quadrant. Predictions: \emph{sparse/sparse}, highest rate of completion-trading exploits; \emph{sparse/dense}, healthy peer metrics with degraded solo metrics; \emph{dense/sparse}, best solo navigation with elevated choke-point conflict; \emph{dense/dense}, lowest exploit incidence and variance at the highest specification cost. Report mean agents home, stranding rate, collision and yield counts, and per-seed variance, with every specification published. This sweep is future work; we publish with one inhabited quadrant because that quadrant already produced a documented, quantified instance of its predicted failure.
+
+\section{Related work}
+Credit assignment factors \emph{who}: difference rewards and COIN (Wolpert and Tumer), and the value-decomposition and counterfactual lines (VDN, QMIX, COMA), none by reward density and none yielding a failure-mode map. Reward shaping addresses the density axis, classically with the potential-based guarantee (Ng et al., 1999) and recently with automated dense shaping for sparse MARL (ARMS, arXiv:2605.23562), treating the recipient axis as out of scope. Design-space taxonomies exist for adjacent domains: arXiv:2605.02801 taxonomizes reward families, granularity, and hacking risks for LLM-based multi-agent systems, with different axes. Specification-gaming catalogues (Krakovna et al., 2020) document the failure class our incident belongs to as instances, not as a predictive structure over reward shapes. To our knowledge, based on a search current to August 2026, no published framework crosses the recipient axis with the density axis and reads failure modes off the quadrants; we state this as search-limited, not as proof of absence.
+
+\section{Limitations}
+One environment, one incident, one inhabited quadrant; the off-diagonal predictions are stated, not demonstrated. The taxonomy risks reading as a relabeling of known ideas; its value claim is specifically the predictive reading of the quadrants, which is testable and instantiated once here. Four agents, a gridworld, one algorithm: whether the signatures survive scale, continuous action spaces, and mixed-motive settings is open.
+
+\begin{thebibliography}{10}
+\bibitem{ng1999} A.~Y. Ng, D.~Harada, S.~Russell. Policy invariance under reward transformations: theory and application to reward shaping. \emph{ICML}, 1999.
+\bibitem{coin} D.~H. Wolpert, K.~Tumer. An introduction to collective intelligence. NASA Ames, 1999.
+\bibitem{vdn} P.~Sunehag et al. Value-decomposition networks for cooperative multi-agent learning. \emph{AAMAS}, 2018.
+\bibitem{qmix} T.~Rashid et al. QMIX: monotonic value function factorisation for deep multi-agent RL. \emph{ICML}, 2018.
+\bibitem{coma} J.~Foerster et al. Counterfactual multi-agent policy gradients. \emph{AAAI}, 2018.
+\bibitem{krakovna} V.~Krakovna et al. Specification gaming: the flip side of AI ingenuity. DeepMind, 2020.
+\bibitem{arms} ARMS: automatic reward shaping for sparse-reward multi-agent reinforcement learning. arXiv:2605.23562, 2026.
+\bibitem{orch} Reinforcement learning for LLM-based multi-agent systems through orchestration traces. arXiv:2605.02801, 2026.
+\bibitem{survey} D.~Huh, P.~Mohapatra. Multi-agent reinforcement learning: a comprehensive survey. arXiv:2312.10256, 2023.
+\bibitem{assembly} Reward shaping in multiagent reinforcement learning for self-organizing systems in assembly tasks. \emph{Advanced Engineering Informatics}, 2022.
+\end{thebibliography}
+
+\end{document}
