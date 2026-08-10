@@ -22,6 +22,8 @@ Crossing them gives four quadrants, and the claim of this note is that the quadr
 2. A documented incident in which the sparse-sparse quadrant produced precisely its predicted failure, with the diagnosis, the repair, and the repaired system's *lower* headline score reported as the health signal it is (Section 3).
 3. An honest placement of our shipped system in the matrix, including what it would cost to move along each axis (Section 4), and the controlled sweep that would test the remaining quadrants (Section 5).
 
+**What is new here, and what is not.** Neither axis is new. The recipient distinction is thoroughly worked in the individual-versus-team reward literature, and most directly in social-influence shaping, where a per-agent reward is already written as a weighted sum of a self-progress term and a term for the agent's causal influence on others. The density distinction is standard, and "reward density" has recently been given quantitative definitions. Tying reward structure to characteristic failure modes also has precedent, most closely in a 2026 design-space table for LLM-based multi-agent systems that maps eight reward families to their dominant hacking risks. What we claim is narrower: the *crossing* of the two axes into four quadrants, and the reading that each quadrant carries a distinct and predictable failure signature. We claim the packaging and its predictive use, not the parts, and Section 6 states the parts explicitly so the claim can be judged.
+
 ## 2. The taxonomy
 
 Write a multi-agent reward as a sum of terms, and sort every term by two questions.
@@ -75,29 +77,46 @@ Reporting: mean agents home, stranding rate, collision and yield counts, and per
 
 ## 6. Related work
 
-**Credit assignment** decides which agent a shared outcome belongs to: difference rewards and the COIN framework (Wolpert and Tumer), and the value-decomposition and counterfactual lines (VDN, QMIX, COMA). These factor *who*, but not by reward density, and they do not yield a failure-mode map.
+We group prior work by which part of our proposal it already contains.
 
-**Reward shaping** densifies sparse signals, classically with the potential-based guarantee of Ng, Harada and Russell (1999); recent MARL work automates dense shaping from sparse signals (ARMS, arXiv:2605.23562). Shaping addresses the density axis but treats the recipient axis as out of scope.
+**The recipient axis is established.** Cooperative MARL has a deep literature on whether a reward pays the individual or the team. Difference rewards isolate an agent's marginal contribution to global utility (Wolpert and Tumer; Agogino and Tumer), and the value-decomposition and counterfactual lines carry the same concern into value estimation (VDN, QMIX, QTRAN, COMA), with later work examining when the individual-global-max condition is lossy (arXiv:2209.09640). Hybrid designs combine a team reward with agent-specific terms explicitly: IRAT adds individual rewards to assist a shared cooperative objective (Wang et al., ICML 2022); LIDR learns individual difference rewards alongside a shared team reward (Yang et al., AAMAS 2023); and, directly in our own domain, Zhao et al. (AAMAS 2023) define a hybrid team-plus-individual reward for multi-agent path finding. Mao et al. (arXiv:2003.03433) categorize cooperative MARL rewards by scope, global against several forms of local.
 
-**Design-space taxonomies** exist for adjacent domains: arXiv:2605.02801 taxonomizes reward families, granularity, and hacking risks for LLM-based multi-agent systems. Its axes (family, granularity, source) are different, and it does not cross recipient with density.
+Closest of all on this axis is social-influence shaping (Jaques et al., arXiv:1810.08647), where the per-agent reward is written `r_i = alpha * z_i + beta * c_i`, with `z_i` a self-progress term and `c_i` the agent's causal influence on peers. That is our recipient split, already stated, with explicit trade-off weights. The difference is that these are two components summed inside one objective, not two axes of a design space, and density is never crossed with them.
 
-**Specification gaming** catalogues (Krakovna et al.) document optimizers exploiting misspecified objectives, including the class our incident belongs to, but as a list of instances rather than a predictive structure over multi-agent reward shapes.
+**The density axis is established, and the term is taken.** Sparse-reward MARL work converts sparse delayed team signals into dense per-agent ones: Agent-Time Attention (AAMAS 2022) redistributes across both time and agents; ARMS (arXiv:2605.23562) learns dense shaping from sparse rewards by trajectory ranking. Potential-based shaping is the classical safe densification (Ng, Harada and Russell, 1999), extended by Devlin and Kudenko to preserve Nash equilibria in cooperative multi-agent settings, which is the result our own implementation relies on. "Reward density" has also been given explicit quantitative definitions: as the average number of steps between reward signals (Wang and Ammanabrolu, arXiv:2510.01132), and as expected reward per unit exploration cost (ACL 2026). We adopt the existing term rather than coining one, and note that our use of it is categorical where these are quantitative.
 
-To our knowledge, based on a literature search current to August 2026, no published framework crosses the recipient axis with the density axis and reads failure modes off the quadrants. We state this as a search-limited claim, not a proof of absence, and would welcome pointers to prior statements of the same structure.
+**Structure-to-failure-mode mapping has precedent.** The closest precedent for our central move is Table 10 of arXiv:2605.02801, which organizes eight reward families for LLM-based multi-agent systems along five axes including granularity and dominant hacking risk, mapping shared team outcome rewards to reward diffusion and free-riding, process rewards to step-padding and reward-model gaming, and hybrid local-global rewards to weight drift and signal drowning. That is reward structure predicting failure mode, in a multi-agent setting, published before this note. It differs from our proposal in that recipient is encoded indirectly through granularity, density and recipient co-move across families rather than varying independently, and the result is an eight-by-five reference table rather than a two-axis space with four quadrants. Hasan and Niyogi (ACM SAC 2024) comparatively study environment, difference, potential-based, and redistributed reward specifications in collaborative MARL and discuss sparse tasks and densification together, which is a design-space comparison without a taxonomic crossing.
+
+**Reward hacking taxonomies classify by exploit, not by reward shape.** Formal characterizations (Skalse et al., 2022) and specification-gaming catalogues (Krakovna et al., 2020) enumerate failure classes, and recent benchmarks classify exploits at fine grain, with TRACE (arXiv:2601.20103) defining 54 exploit categories in code environments. These organize by exploit mechanism. Ours organizes by the reward-shape decision that precedes the exploit, which is what makes it usable before training rather than after an incident.
+
+**Statement of the gap.** Based on a deep literature search current to August 2026, including targeted searches for the paired terms and for any matrix crossing these axes, we found no published framework that treats recipient and density as two independent axes and reads a distinct failure mode off each of the four resulting quadrants. We state this as search-limited rather than as proof of absence, and we would welcome a pointer to a prior statement of the same structure. The honest characterization of the contribution is a new organizing lens over well-studied phenomena, whose value stands or falls on whether the quadrant predictions in Section 5 hold.
 
 ## 7. Limitations
 
-One environment, one documented incident, one inhabited quadrant. The off-diagonal predictions are stated, not yet demonstrated; Section 5 is the required experiment. The taxonomy risks being read as a relabeling of known ideas; our response is that its value claim is specifically the *predictive* reading of the quadrants, which is testable and which Section 3 instantiates once. Scale is small: four agents, a gridworld, one algorithm. Whether the quadrant signatures survive scale, continuous action spaces, and mixed-motive settings is open.
+One environment, one documented incident, one inhabited quadrant. The off-diagonal predictions are stated, not yet demonstrated; Section 5 is the required experiment. The taxonomy risks being read as a relabeling of known ideas, and Section 6 concedes that both axes and the structure-to-failure-mode move all have precedent, social-influence shaping being the nearest neighbour on the recipient axis. Our response is that the value claim is specifically the *predictive* reading of the four quadrants, which is testable, which Section 3 instantiates once, and which Section 5 sets out to falsify. Scale is small: four agents, a gridworld, one algorithm. Whether the quadrant signatures survive scale, continuous action spaces, and mixed-motive settings is open.
 
 ## References
 
 1. A. Y. Ng, D. Harada, S. Russell. Policy invariance under reward transformations: theory and application to reward shaping. *ICML*, 1999.
 2. D. H. Wolpert, K. Tumer. An introduction to collective intelligence. Technical report, NASA Ames, 1999.
-3. P. Sunehag et al. Value-decomposition networks for cooperative multi-agent learning. *AAMAS*, 2018.
-4. T. Rashid et al. QMIX: monotonic value function factorisation for deep multi-agent reinforcement learning. *ICML*, 2018.
-5. J. Foerster et al. Counterfactual multi-agent policy gradients. *AAAI*, 2018.
-6. V. Krakovna et al. Specification gaming: the flip side of AI ingenuity. DeepMind blog, 2020.
-7. ARMS: Automatic reward shaping for sparse-reward multi-agent reinforcement learning. arXiv:2605.23562, 2026.
-8. Reinforcement learning for LLM-based multi-agent systems through orchestration traces. arXiv:2605.02801, 2026.
-9. D. Huh, P. Mohapatra. Multi-agent reinforcement learning: a comprehensive survey. arXiv:2312.10256, 2023.
-10. Reward shaping in multiagent reinforcement learning for self-organizing systems in assembly tasks. *Advanced Engineering Informatics*, 2022.
+3. S. Devlin, D. Kudenko. Theoretical considerations of potential-based reward shaping for multi-agent systems. *AAMAS*, 2011.
+4. N. Jaques et al. Social influence as intrinsic motivation for multi-agent deep reinforcement learning. arXiv:1810.08647, 2018.
+5. P. Sunehag et al. Value-decomposition networks for cooperative multi-agent learning. *AAMAS*, 2018.
+6. T. Rashid et al. QMIX: monotonic value function factorisation for deep multi-agent reinforcement learning. *ICML*, 2018.
+7. J. Foerster et al. Counterfactual multi-agent policy gradients. *AAAI*, 2018.
+8. K. Son et al. QTRAN: learning to factorize with transformation for cooperative multi-agent reinforcement learning. *ICML*, 2019.
+9. Rethinking individual global max in cooperative multi-agent reinforcement learning. arXiv:2209.09640, *NeurIPS*, 2022.
+10. Reward design in cooperative multi-agent reinforcement learning for packet routing. arXiv:2003.03433, 2020.
+11. Wang et al. Individual reward assisted multi-agent reinforcement learning. *ICML (PMLR v162)*, 2022.
+12. Yang et al. Learning individual difference rewards in multi-agent systems. *AAMAS*, 2023.
+13. Zhao et al. Multi-agent path finding via reinforcement learning with hybrid reward. *AAMAS*, 2023.
+14. Agent-time attention for sparse rewards multi-agent reinforcement learning. *AAMAS*, 2022.
+15. ARMS: automatic reward shaping for sparse-reward multi-agent reinforcement learning. arXiv:2605.23562, 2026.
+16. J. Wang, P. Ammanabrolu. A practitioner's guide to multi-turn agentic reinforcement learning. arXiv:2510.01132, 2025.
+17. Reinforcing agentic search via reward density optimization. *ACL*, 2026.
+18. M. Hasan, R. Niyogi. Reward specifications in collaborative multi-agent learning: a comparative study. *ACM SAC*, 2024.
+19. Reinforcement learning for LLM-based multi-agent systems through orchestration traces. arXiv:2605.02801, 2026.
+20. J. Skalse et al. Defining and characterizing reward hacking. *NeurIPS*, 2022.
+21. V. Krakovna et al. Specification gaming: the flip side of AI ingenuity. DeepMind, 2020.
+22. TRACE: benchmarking reward hack detection in code environments. arXiv:2601.20103, 2026.
+23. D. Huh, P. Mohapatra. Multi-agent reinforcement learning: a comprehensive survey. arXiv:2312.10256, 2023.
