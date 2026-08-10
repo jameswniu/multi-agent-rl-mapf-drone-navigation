@@ -53,3 +53,7 @@ gym-results/
 # Docker/K8s runtime files
 *.pid
 *.sock
+
+# private research scratch, kept out of the public repo
+paper/
+configs/quadrants/
