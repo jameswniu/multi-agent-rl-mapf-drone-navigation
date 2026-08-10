@@ -81,6 +81,12 @@ class DroneEnv(gym.Env):
         # reward a run reports, and a number that silently means something else
         # is worse than a hard task.
         self.reward_shaping: bool = bool(self.config.get("reward_shaping", False))
+        # Dense peer term, g(coop_quality). The completion bonus pays for
+        # cooperation as an event; this pays for its quality every step, which
+        # is the second axis of the reward-density matrix in the README. Off by
+        # default so the shipped reward is unchanged.
+        self.peer_shaping: bool = bool(self.config.get("peer_shaping", False))
+        self.peer_weight: float = float(self.config.get("peer_weight", 0.5))
 
         # Reward terms. Named and configurable because their relative sizes are
         # the whole design: the completion bonus has to outweigh what a policy
@@ -508,6 +514,37 @@ class DroneEnv(gym.Env):
             )
         return np.array(rows, dtype=np.float32)
 
+    def _coop_quality(self) -> np.ndarray:
+        """g(coop_quality): per-drone clearance from peers, in [0, 1].
+
+        One graded number per drone per step, measuring how much room it is
+        leaving its neighbours. A drone with all four adjacent cells free
+        scores 1.0; one boxed in by peers scores 0.0. This is deliberately a
+        quality signal rather than an event: the completion bonus already pays
+        for cooperation happening, and the point of the second axis is to pay
+        for how well it is happening while it happens.
+
+        Crowding is measured on plan coordinates. Two drones at the same
+        location but different altitudes are still competing for the same
+        ground track, which is what a conflict at a choke point looks like.
+        """
+        n = len(self.positions)
+        if n < 2:
+            return np.ones(n, dtype=np.float32)
+
+        out = np.zeros(n, dtype=np.float32)
+        occupied = {(float(p[0]), float(p[1])) for p in self.positions}
+        for i, pos in enumerate(self.positions):
+            x, y = float(pos[0]), float(pos[1])
+            others = occupied - {(x, y)}
+            free = sum(
+                1.0
+                for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1))
+                if (nx, ny) not in others
+            )
+            out[i] = free / 4.0
+        return out
+
     def _potential(self, positions) -> np.ndarray:
         """Negative distance to each drone's goal, higher being closer.
 
@@ -719,6 +756,15 @@ class DroneEnv(gym.Env):
             )
             after = self._potential(self.positions)
             rewards = rewards + self.shaping_gamma * after - before
+
+        if self.peer_shaping:
+            # Paid every step, to every drone that is not already home. A drone
+            # sitting on its goal is excluded so that clearance cannot become a
+            # second camping income, which is the exact failure the arrival
+            # bonus had to be repaired for.
+            rewards = rewards + np.where(
+                at_goal, 0.0, self.peer_weight * self._coop_quality()
+            )
 
         terminated = bool(at_goal.all())
 

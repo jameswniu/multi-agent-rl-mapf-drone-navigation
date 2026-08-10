@@ -1,0 +1,15 @@
+# Quadrant: self=dense, peer=sparse
+# Only the two reward-density switches differ across the four files in this
+# directory. Everything else is held fixed so the sweep isolates reward shape.
+grid_size: 8
+num_drones: 4
+obstacle_density: 0.1
+max_steps: 60
+
+reward_shaping: true
+peer_shaping: false
+peer_weight: 0.5
+
+safety:
+  geofence_margin: 0
+  min_separation: 0

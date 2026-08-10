@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 560" width="900" height="560" role="img" aria-label="Four-quadrant reward density sweep: the self axis moves the task metric, the peer axis does not, and the predicted drop in stranding does not appear" font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif">
+<defs>
+  <linearGradient id="bgsw" x1="0" y1="0" x2="0.75" y2="1">
+    <stop offset="0" stop-color="#12161c"/><stop offset="0.55" stop-color="#0c1013"/><stop offset="1" stop-color="#080a0d"/>
+  </linearGradient>
+  <pattern id="dotsw" width="28" height="28" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="0.7" fill="#161d26"/></pattern>
+  <linearGradient id="ndsw" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#19212b"/><stop offset="1" stop-color="#111820"/>
+  </linearGradient>
+  <linearGradient id="rlsw" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0" stop-color="#3987e5" stop-opacity="0.95"/><stop offset="1" stop-color="#3987e5" stop-opacity="0"/>
+  </linearGradient>
+  <marker id="arsw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#5a6673"/></marker>
+  <marker id="argsw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#199e70"/></marker>
+  <marker id="arosw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#d95926"/></marker>
+  <marker id="arbsw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#3987e5"/></marker>
+</defs>
+<rect x="0" y="0" width="900" height="560" fill="url(#bgsw)"/>
+<rect x="0" y="0" width="900" height="560" fill="url(#dotsw)"/>
+<text x="36" y="42" fill="#3987e5" font-size="15" font-weight="700" letter-spacing="3" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">SWEEP RESULT</text>
+<text x="36" y="78" fill="#f3f6f9" font-size="25" font-weight="700">The self axis moves it. The peer axis does not.</text>
+<rect x="36" y="92" width="130" height="2.5" fill="url(#rlsw)"/>
+<text x="120" y="134" fill="#9aa5b1" font-size="14" text-anchor="start" font-weight="400" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">mean drones home, 4 possible</text>
+<line x1="120" y1="380" x2="470" y2="380" stroke="#1e2731" stroke-width="1"/>
+<text x="108" y="385.0" fill="#7d8896" font-size="14" text-anchor="end" font-weight="400" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">0</text>
+<line x1="120" y1="275" x2="470" y2="275" stroke="#1e2731" stroke-width="1"/>
+<text x="108" y="280.4545454545455" fill="#7d8896" font-size="14" text-anchor="end" font-weight="400" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">1</text>
+<line x1="120" y1="171" x2="470" y2="171" stroke="#1e2731" stroke-width="1"/>
+<text x="108" y="175.90909090909093" fill="#7d8896" font-size="14" text-anchor="end" font-weight="400" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">2</text>
+<rect x="138" y="255" width="52" height="125" fill="#3987e5" rx="3"/>
+<line x1="164" y1="250" x2="164" y2="260" stroke="#c8d2dc" stroke-width="2"/>
+<line x1="155" y1="250" x2="173" y2="250" stroke="#c8d2dc" stroke-width="2"/>
+<line x1="155" y1="260" x2="173" y2="260" stroke="#c8d2dc" stroke-width="2"/>
+<text x="163.75" y="237.97165932935988" fill="#f3f6f9" font-size="17" text-anchor="middle" font-weight="700" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">1.20</text>
+<text x="163.75" y="406" fill="#9aa5b1" font-size="12" text-anchor="middle" font-weight="400" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">self sparse</text>
+<text x="163.75" y="423" fill="#9aa5b1" font-size="12" text-anchor="middle" font-weight="400" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">peer sparse</text>
+<rect x="225" y="205" width="52" height="175" fill="#199e70" rx="3"/>
+<line x1="251" y1="178" x2="251" y2="232" stroke="#c8d2dc" stroke-width="2"/>
+<line x1="242" y1="178" x2="260" y2="178" stroke="#c8d2dc" stroke-width="2"/>
+<line x1="242" y1="232" x2="260" y2="232" stroke="#c8d2dc" stroke-width="2"/>
+<text x="251.25" y="165.86669293703906" fill="#f3f6f9" font-size="17" text-anchor="middle" font-weight="700" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">1.68</text>
+<text x="251.25" y="406" fill="#9aa5b1" font-size="12" text-anchor="middle" font-weight="400" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">self DENSE</text>
+<text x="251.25" y="423" fill="#9aa5b1" font-size="12" text-anchor="middle" font-weight="400" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">peer sparse</text>
+<rect x="313" y="263" width="52" height="117" fill="#3987e5" rx="3"/>
+<line x1="339" y1="256" x2="339" y2="269" stroke="#c8d2dc" stroke-width="2"/>
+<line x1="330" y1="256" x2="348" y2="256" stroke="#c8d2dc" stroke-width="2"/>
+<line x1="330" y1="269" x2="348" y2="269" stroke="#c8d2dc" stroke-width="2"/>
+<text x="338.75" y="243.90856762390965" fill="#f3f6f9" font-size="17" text-anchor="middle" font-weight="700" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">1.12</text>
+<text x="338.75" y="406" fill="#9aa5b1" font-size="12" text-anchor="middle" font-weight="400" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">self sparse</text>
+<text x="338.75" y="423" fill="#9aa5b1" font-size="12" text-anchor="middle" font-weight="400" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">peer DENSE</text>
+<rect x="400" y="215" width="52" height="165" fill="#199e70" rx="3"/>
+<line x1="426" y1="198" x2="426" y2="231" stroke="#c8d2dc" stroke-width="2"/>
+<line x1="417" y1="198" x2="435" y2="198" stroke="#c8d2dc" stroke-width="2"/>
+<line x1="417" y1="231" x2="435" y2="231" stroke="#c8d2dc" stroke-width="2"/>
+<text x="426.25" y="185.9899803820277" fill="#f3f6f9" font-size="17" text-anchor="middle" font-weight="700" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">1.58</text>
+<text x="426.25" y="406" fill="#9aa5b1" font-size="12" text-anchor="middle" font-weight="400" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">self DENSE</text>
+<text x="426.25" y="423" fill="#9aa5b1" font-size="12" text-anchor="middle" font-weight="400" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">peer DENSE</text>
+<line x1="120" y1="380" x2="470" y2="380" stroke="#46525f" stroke-width="1.5"/>
+<text x="540" y="134" fill="#9aa5b1" font-size="14" text-anchor="start" font-weight="400" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">what the sweep says</text>
+<rect x="540" y="168" width="324" height="60" fill="url(#ndsw)" stroke="#199e70" stroke-width="1.5" rx="4"/>
+<text x="554" y="192" fill="#199e70" font-size="15" text-anchor="start" font-weight="700" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">self axis</text>
+<text x="850" y="192" fill="#f3f6f9" font-size="15" text-anchor="end" font-weight="400" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">+0.48 and +0.46</text>
+<text x="554" y="214" fill="#7d8896" font-size="13" text-anchor="start" font-weight="400" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">moves the metric</text>
+<text x="850" y="214" fill="#5c6773" font-size="13" text-anchor="end" font-weight="400" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">p = 0.013, 0.002</text>
+<rect x="540" y="242" width="324" height="60" fill="url(#ndsw)" stroke="#d95926" stroke-width="1.5" rx="4"/>
+<text x="554" y="266" fill="#d95926" font-size="15" text-anchor="start" font-weight="700" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">peer axis</text>
+<text x="850" y="266" fill="#f3f6f9" font-size="15" text-anchor="end" font-weight="400" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">-0.07 and -0.09</text>
+<text x="554" y="288" fill="#7d8896" font-size="13" text-anchor="start" font-weight="400" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">no effect</text>
+<text x="850" y="288" fill="#5c6773" font-size="13" text-anchor="end" font-weight="400" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">p = 0.077, 0.511</text>
+<rect x="540" y="316" width="324" height="60" fill="url(#ndsw)" stroke="#d95926" stroke-width="1.5" rx="4"/>
+<text x="554" y="340" fill="#d95926" font-size="15" text-anchor="start" font-weight="700" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">stranding</text>
+<text x="850" y="340" fill="#f3f6f9" font-size="15" text-anchor="end" font-weight="400" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">+0.07 in dense/dense</text>
+<text x="554" y="362" fill="#7d8896" font-size="13" text-anchor="start" font-weight="400" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">predicted to fall; rose</text>
+<text x="850" y="362" fill="#5c6773" font-size="13" text-anchor="end" font-weight="400" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">p = 0.039</text>
+<rect x="540" y="390" width="324" height="66" fill="#1c130e" stroke="#d95926" stroke-width="1.5" rx="4"/>
+<text x="702" y="414" fill="#e0763f" font-size="14" text-anchor="middle" font-weight="700" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">why the peer axis is inert here</text>
+<text x="702" y="436" fill="#9aa5b1" font-size="13" text-anchor="middle" font-weight="400" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">clearance spanned 0.946 to 0.970 over</text>
+<text x="702" y="452" fill="#9aa5b1" font-size="13" text-anchor="middle" font-weight="400" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">all 20 runs, so it carries no gradient</text>
+<text x="36" y="486" fill="#7d8896" font-size="15" font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif">Five seeds per cell, 2000 training episodes, 100 greedy evaluation episodes, Welch t-tests. Only the reward-density</text>
+<text x="36" y="508" fill="#7d8896" font-size="15" font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif">switches differ across cells. The self-axis effect replicates potential-based shaping and is not new. The peer-axis</text>
+<text x="36" y="530" fill="#7d8896" font-size="15" font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif">prediction is not supported, and the environment is the reason: it cannot generate the contention the axis is about.</text>
+</svg>

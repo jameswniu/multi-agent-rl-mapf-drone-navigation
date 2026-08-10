@@ -15,7 +15,7 @@
 \maketitle
 
 \begin{abstract}
-Reward design advice in multi-agent reinforcement learning usually treats two questions as one: how often the reward arrives (sparse versus dense) and who the reward is about (the agent's own task versus its interactions with peers). We propose factoring them apart. The result is a $2{\times}2$ taxonomy in which each axis, self-alignment and peer-interaction, is independently sparse or dense, and each of the four quadrants predicts a distinct failure mode. We ground the taxonomy in a documented incident from a four-drone PPO gridworld: a sparse-sparse reward paid per-step income for standing on a goal while the episode ended only when every drone arrived, so completing the task switched the income off. The learned policy stranded one drone deliberately, scoring $+500$ against $-40$ for finishing, exactly the goal-hacking failure the sparse-sparse quadrant predicts. Repairing the specification lowered the headline score from $0.80$ to $0.40$ mean drones home, the expected signature of removing an exploit rather than a regression. We state what the taxonomy predicts for the three uninhabited quadrants and propose the controlled four-quadrant sweep that would test those predictions.
+Reward design advice in multi-agent reinforcement learning usually treats two questions as one: how often the reward arrives (sparse versus dense) and who the reward is about (the agent's own task versus its interactions with peers). We factor them apart into a $2{\times}2$ taxonomy, state a falsifiable failure-mode prediction per quadrant, and test it. The motivating incident is real: a sparse-sparse reward in a four-drone PPO gridworld paid per-step income for standing on a goal while the episode ended only when every drone arrived, so finishing switched the income off, and the policy stranded one drone deliberately, scoring $+500$ against $-40$ for completing. Repairing it lowered the headline score from 0.80 to 0.40 mean drones home, the signature of removing an exploit. We then ran the controlled sweep: four quadrants, five seeds, 2000 episodes per run, reward density the only manipulated variable. \textbf{The central prediction did not survive.} The self-alignment axis behaved significantly ($+0.48$, $p=0.013$; $+0.46$, $p=0.002$), replicating potential-based shaping rather than establishing anything new. The peer-interaction axis produced no measurable effect ($-0.07$, $p=0.077$; $-0.09$, $p=0.511$), and stranding, predicted lowest in dense-dense, was higher there than in sparse-sparse ($+0.07$, $p=0.039$), opposite to the prediction. The diagnosis is the testbed: the cooperation signal spanned only 0.946 to 0.970 across twenty runs, so the dense peer term carried almost no gradient. We report the negative result and state what an environment must have for this axis to be testable at all.
 \end{abstract}
 
 \section{Introduction}
@@ -61,8 +61,37 @@ The axes are independent because they answer different questions: density is \em
 \section{Placement, and the cost of moving}
 The shipped system sits in the sparse-sparse quadrant with the exploit patched. Moving is asymmetric. \textbf{Self axis:} potential-based shaping $F = \gamma\,\phi(s') - \phi(s)$ in the form of Ng, Harada and Russell (1999) is already implemented, provably policy-invariant, and off by default; the move is a configuration flag plus revalidation. \textbf{Peer axis:} a $g(\text{coop\_quality})$ term does not yet exist and is genuine design work, including validating that the graded signal is not itself exploitable. That asymmetry may partly explain why deployed multi-agent systems cluster in the sparse-peer column: the self axis has a decades-old safe densification tool; the peer axis has no off-the-shelf equivalent.
 
-\section{The experiment this taxonomy asks for}\label{sec:exp}
-Same environment, same PPO configuration, five seeds per cell, reward specification the only manipulated variable, one specification per quadrant. Predictions: \emph{sparse/sparse}, highest rate of completion-trading exploits; \emph{sparse/dense}, healthy peer metrics with degraded solo metrics; \emph{dense/sparse}, best solo navigation with elevated choke-point conflict; \emph{dense/dense}, lowest exploit incidence and variance at the highest specification cost. Report mean agents home, stranding rate, collision and yield counts, and per-seed variance, with every specification published. This sweep is future work; we publish with one inhabited quadrant because that quadrant already produced a documented, quantified instance of its predicted failure.
+\section{The sweep, and the prediction that failed}\label{sec:exp}
+The taxonomy is falsifiable, so we falsified it. We implemented the missing dense peer term as $g(\text{coop\_quality})$, a per-drone clearance measure in $[0,1]$ giving the fraction of a drone's four adjacent cells free of peers, paid every step to every drone not already home. Excluding drones already home is deliberate: otherwise clearance becomes a second camping income, the exact failure the arrival bonus had to be repaired for.
+
+\textbf{Protocol.} Four quadrants, five seeds each, 2000 training episodes per run, 100 greedy evaluation episodes, four drones on an $8\times8$ grid at 10\% obstacle density with a 60-step cap. Identical PPO hyperparameters and seeds across cells; the only variable differing between configurations is which reward-density switch is on. Comparisons are Welch $t$-tests, $n=5$ per cell.
+
+\textbf{Predictions, stated before the runs.} Sparse-sparse: highest rate of completion-trading exploits. Sparse-dense: healthy peer metrics, degraded solo metrics. Dense-sparse: best solo navigation, elevated choke-point conflict. Dense-dense: lowest exploit incidence and variance.
+
+\begin{table}[h]
+\centering\small
+\begin{tabular}{lcccc}
+\toprule
+quadrant & drones home & stranded & solved & clearance \\
+\midrule
+self sparse, peer sparse & 1.20 (0.05) & 0.69 & 0.03 & 0.959 \\
+self dense, peer sparse & \textbf{1.68} (0.26) & 0.76 & 0.09 & 0.958 \\
+self sparse, peer dense & 1.12 (0.06) & 0.70 & 0.03 & 0.965 \\
+self dense, peer dense & 1.58 (0.16) & 0.76 & 0.07 & 0.957 \\
+\bottomrule
+\end{tabular}
+\caption{Four-quadrant sweep, five seeds per cell, standard deviations in parentheses.}
+\end{table}
+
+\textbf{The self axis behaves, and proves nothing new.} Dense self-alignment moved mean drones home by $+0.48$ holding peers sparse ($p=0.013$) and $+0.46$ holding peers dense ($p=0.002$). Significant and in the predicted direction, and also exactly what potential-based shaping has been known to do since 1999. This validates the implementation, not the taxonomy.
+
+\textbf{The peer axis did nothing.} Dense peer-interaction moved the metric by $-0.07$ ($p=0.077$) and $-0.09$ ($p=0.511$). Neither significant, both slightly the wrong way.
+
+\textbf{The central prediction was refuted.} Stranding, the exploit signature the taxonomy predicts should be \emph{lowest} in dense-dense, was 0.76 there against 0.69 in sparse-sparse: higher by 0.07 at $p=0.039$, opposite to the prediction. Under the standard reading this falsifies the quadrant claim as stated for this environment.
+
+\textbf{Why, and why it is a testbed problem.} The cooperation-quality signal spanned 0.946 to 0.970 across all twenty runs, a range of 0.024 on a unit scale, so $g(\text{coop\_quality})$ was very nearly constant and contributed almost no gradient. Refused-move counts were 0.0 in every cell, because the environment resolves vertex and swap conflicts structurally rather than pricing them. The peer axis was starved rather than tested.
+
+\textbf{What an environment needs for this axis to be testable.} Sustained congestion rather than incidental proximity: agent density high enough that clearance genuinely varies, at least one bottleneck all agents must traverse, and conflict that is priced rather than structurally refused. Our gridworld has none of these. Stating this precondition is more useful to a practitioner than a confirmation would have been, because it says when the distinction is worth paying for.
 
 \section{Related work}\label{sec:related}
 We group prior work by which part of our proposal it already contains.
@@ -78,7 +107,11 @@ We group prior work by which part of our proposal it already contains.
 \paragraph{Statement of the gap.} Based on a deep literature search current to August 2026, including targeted searches for the paired terms and for any matrix crossing these axes, we found no published framework treating recipient and density as two independent axes and reading a distinct failure mode off each quadrant. We state this as search-limited, not as proof of absence, and would welcome a pointer to a prior statement of the same structure. The honest characterization is a new organizing lens over well-studied phenomena, whose value stands or falls on whether the Section~\ref{sec:exp} predictions hold.
 
 \section{Limitations}
-One environment, one incident, one inhabited quadrant; the off-diagonal predictions are stated, not demonstrated. The taxonomy risks reading as a relabeling of known ideas, and Section~\ref{sec:related} concedes that both axes and the structure-to-failure-mode move all have precedent, social-influence shaping being the nearest neighbour. Our response is that the value claim is specifically the predictive reading of the four quadrants, which is testable, instantiated once here, and which Section~\ref{sec:exp} sets out to falsify. Four agents, a gridworld, one algorithm: whether the signatures survive scale, continuous action spaces, and mixed-motive settings is open.
+The headline limitation is the result itself: in the one environment tested, the peer axis produced no effect and the dense-dense prediction was refuted at $p=0.039$ in the wrong direction. We report this rather than reframing around the axis that worked, because the axis that worked is a 1999 result and the axis that failed is the one the taxonomy needed.
+
+Two readings remain open and we cannot presently distinguish them. Either the peer axis is not a useful design dimension, or our testbed cannot exercise it, with the saturated clearance signal and zero refused-move counts pointing hard at the second. Distinguishing them requires the congested environment of Section~\ref{sec:exp}; until then the taxonomy has one confirmed axis, one untested axis, and one refuted quadrant prediction.
+
+Other limits: one algorithm, one small discrete gridworld, four agents, one choice of $g(\text{coop\_quality})$ among many reasonable ones, and $n=5$ seeds, enough for the large self-axis effect and thin for anything subtle. The taxonomy also risks reading as a relabeling; Section~\ref{sec:related} concedes that both axes and the structure-to-failure-mode move have precedent, social-influence shaping being the nearest neighbour.
 
 \begin{thebibliography}{23}
 \bibitem{ng1999} A.~Y. Ng, D.~Harada, S.~Russell. Policy invariance under reward transformations. \emph{ICML}, 1999.
